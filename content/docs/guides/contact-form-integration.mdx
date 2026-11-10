@@ -1,0 +1,118 @@
+---
+title: Contact form integration
+description: How the Prismelo contact form validates and delivers submissions, and how to configure email delivery.
+status: Published
+---
+
+The contact form posts to a server route at `/api/contact`. Validation, spam rejection and delivery all happen server-side. Without delivery configuration the route reports that honestly rather than pretending a message was sent.
+
+## Request contract
+
+```ts
+type ContactRequest = {
+  name: string;      // required, 2–80 characters
+  email: string;     // required, RFC-shaped
+  company?: string;  // optional, max 120 characters
+  service?: string;  // optional, one of the service labels
+  details: string;   // required, 20–4000 characters
+  website?: string;  // honeypot, must be empty
+};
+```
+
+## Responses
+
+| Status | Body | Meaning |
+| --- | --- | --- |
+| `200` | `{ "ok": true }` | Accepted and delivered |
+| `400` | `{ "error": "validation_failed", "fields": {...} }` | Field-level validation failed |
+| `429` | `{ "error": "rate_limited" }` | Too many submissions from one address |
+| `501` | `{ "error": "delivery_not_configured" }` | No email provider configured |
+| `502` | `{ "error": "delivery_failed" }` | Provider rejected the message |
+
+When the route returns `501`, the interface shows an explicit notice and a mailto fallback containing the submitted text. It does not show a success state.
+
+## Environment variables
+
+```bash
+# SMTP relay (Brevo) — port 587 uses STARTTLS, port 465 uses implicit TLS
+SMTP_HOST=smtp-relay.brevo.com
+SMTP_PORT=587
+SMTP_USER=your-relay-login@smtp-brevo.com
+SMTP_PASS=your-smtp-key
+
+# Verified sender address at the relay
+CONTACT_FROM_EMAIL="Prismelo Website <website@prismelo.tech>"
+
+# Destination for enquiries — keep private
+CONTACT_TO_EMAIL=hello@prismelo.tech
+```
+
+Set these in the deployment environment. They are server-only: none are prefixed with `NEXT_PUBLIC_`, and none are read in client components.
+
+## Delivery implementation
+
+All outgoing mail goes through `lib/mailer.ts`, which holds one pooled
+`nodemailer` transport. The route does not talk to a provider directly:
+
+```ts
+const delivery = await deliverMail({
+  to: process.env.CONTACT_TO_EMAIL,
+  replyTo: payload.email,
+  subject: `Website enquiry — ${payload.service ?? "General"}`,
+  text: renderPlainText(payload),
+});
+```
+
+`deliverMail` returns one of three outcomes — delivered, not configured, or
+failed with the relay's message — so a caller can never claim a send that did
+not happen. The sender address is `CONTACT_FROM_EMAIL` (or `EMAIL_FROM`), and
+the SMTP login is only used if neither is set. Whatever address you send from
+must be a verified sender or domain at the relay, or Brevo rejects the message.
+
+## What the email looks like
+
+Every message is rendered by `renderEmail` in `lib/email.ts` as a 600px
+table-based layout with inline styles, so it survives Gmail, Apple Mail and
+Outlook without a stylesheet:
+
+- **Header** — the Prismelo mark and wordmark on the brand black, with a lime
+  rule underneath. The mark is `public/email-logo.png`, a raster copy of
+  `app/icon.svg` (email clients cannot render SVG), sent as an inline `cid:`
+  attachment so the header still shows when remote images are blocked.
+- **Body** — an optional kicker, the heading, paragraphs, an optional field
+  table, and a bordered block containing the full submitted message with its
+  paragraph breaks intact.
+- **Action** — one button. For enquiries it opens a reply addressed to the
+  visitor, so answering needs one click rather than a copy-paste.
+- **Footer** — the reason the message arrived, then the company name, the
+  website and the contact address as links.
+
+Enquiries pass `details` and `quote`; community and policy notifications use
+the same shell without them.
+
+## Test it locally
+
+```bash
+curl -i -X POST http://localhost:3000/api/contact \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Test Contact",
+    "email": "test@example.com",
+    "service": "Penetration Testing",
+    "details": "This is a validation test for local development."
+  }'
+```
+
+Without delivery configuration, expect `501` and the honest interface state. With configuration, expect `200` and a message at `CONTACT_TO_EMAIL`.
+
+## Security notes
+
+- Validation runs on the server; client-side validation is a convenience only.
+- The honeypot field rejects naive bots without a CAPTCHA.
+- Rate limiting is in-memory and per instance. In a multi-instance deployment, enforce it at the platform or edge layer instead.
+- Submitted content is never interpolated into HTML without escaping.
+- The destination address is never exposed to the browser.
+
+## Integration point
+
+If you are extending this site, the only file that needs to change for a different delivery provider is `lib/mailer.ts`. The contact route, the community notifications and the legal-update notices all share it, and the form component treats delivery as opaque.

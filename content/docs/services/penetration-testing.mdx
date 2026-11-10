@@ -1,0 +1,66 @@
+---
+title: Assessment scope & authorization
+description: The authorization, scoping and rules-of-engagement requirements that apply to every Prismelo security assessment.
+status: Published
+---
+
+Prismelo performs security testing only where there is explicit, documented authorization from the system owner. This page describes what that requires in practice and how an assessment is scoped.
+
+<Callout title="Authorization is not optional" tone="warning">
+  We do not test systems we have not been authorized to test, and we do not begin active testing before written approval is in place. Requests to test a third party's systems without their consent will be declined.
+</Callout>
+
+## Before testing begins
+
+The following must be confirmed in writing:
+
+1. **Authorizing party** — a named individual with authority over the systems in scope.
+2. **Targets** — exact domains, IP ranges, applications and environments.
+3. **Exclusions** — anything that must not be touched, including third-party services and shared infrastructure.
+4. **Rules of engagement** — permitted techniques, prohibited techniques, test accounts, and data handling.
+5. **Timing** — testing windows, blackout periods and change freezes.
+6. **Contacts** — a technical contact and an escalation contact reachable during testing.
+
+A scope and authorization document is signed by both parties before any active testing occurs.
+
+## Environments
+
+Testing usually runs against a staging environment that mirrors production. Production testing is possible where it is genuinely necessary, but it is scoped more tightly: restricted techniques, agreed windows and your team on standby.
+
+## Methodology, in outline
+
+| Phase | Activity |
+| --- | --- |
+| Reconnaissance | Map surface area, roles, integrations and data flows |
+| Authentication | Session handling, credential flows, MFA behavior, password policy in practice |
+| Authorization | Horizontal and vertical access checks between users, roles and tenants |
+| Input handling | Injection classes, deserialization, file handling, template evaluation |
+| Business logic | Abuse of intended workflows, state transitions, limits and quotas |
+| Validation | Manual reproduction and false-positive removal |
+
+Techniques with a realistic chance of disruption — denial-of-service, destructive actions, social engineering, physical access — are excluded unless separately authorized and lawful.
+
+## Severity
+
+Findings carry a severity derived from CVSS as a reference, adjusted for reachability, required access and business context. Each finding records the affected component, evidence, reproduction steps, impact and recommended remediation.
+
+Priority is a separate axis from severity: a medium-severity issue in an internet-facing authentication path may warrant faster action than a high-severity issue requiring local access.
+
+## Reporting
+
+The report contains:
+
+- an executive summary for non-technical stakeholders
+- a findings register with evidence and reproduction steps
+- remediation guidance specific to the observed stack
+- a prioritized remediation sequence
+
+Interim critical findings are communicated during the engagement rather than held for the final report.
+
+## Retesting
+
+Retesting of remediated findings is included where agreed in scope. The retest confirms the specific reported issues; it is not a full re-assessment unless separately scoped.
+
+## Documentation not published here
+
+Detailed test plans, payload libraries, internal tooling and client-specific reports are not published. They are shared within an engagement, under confidentiality terms where required.

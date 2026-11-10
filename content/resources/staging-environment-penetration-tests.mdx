@@ -1,0 +1,52 @@
+---
+title: Why your staging environment makes penetration tests lie
+description: Staging never mirrors production exactly. Recording the differences is what keeps an assessment honest.
+category: Security
+date: 2026-10-24
+featured: true
+---
+
+A penetration test is an argument about what is possible. Like any argument, it is only as good as its premises. When the assessment runs against a staging environment, one of those premises — that what was tested resembles what you run — needs to be examined rather than assumed.
+
+## The gap, in practice
+
+Staging environments diverge from production in ways that quietly change exploitability:
+
+- A web application firewall exists in production and not in staging.
+- Network segmentation differs, so an internal service is reachable in one environment and not the other.
+- The identity provider is a test tenant with different session lifetimes and group mappings.
+- Data is a sanitised subset, so a query that returns two rows in staging returns two hundred thousand in production.
+- Debug endpoints are enabled in staging because they are convenient.
+
+None of these make the test worthless. They make it conditional, and conditions belong in the report.
+
+## What we record
+
+Before testing, we produce an environment delta table as part of the scope document. For each relevant control, we note whether it exists in the tested environment, in production, or both.
+
+| Control | Staging | Production | Effect on findings |
+| --- | --- | --- | --- |
+| WAF | Absent | Present | Exploitability in production unconfirmed |
+| Segmentation | Flat | Private subnets | Lateral movement likely overstated |
+| Identity provider | Test tenant | Production tenant | Session findings may differ |
+| Data volume | Subset | Full | Impact understated |
+
+This takes perhaps an hour to assemble with the client's technical contact. It prevents several hours of disagreement later.
+
+## Separate severity from reachability
+
+The most useful habit we have adopted is refusing to blend these two properties.
+
+**Severity** describes the demonstrated impact of an issue in the environment where it was confirmed. **Reachability** describes how confidently that impact transfers to production, given the deltas above.
+
+A high-severity issue with low reachability confidence is not a medium-severity issue. It is a high-severity issue that needs one more check before it is scheduled. Collapsing the two makes the register easier to read and less useful to act on.
+
+## Retesting in the right place
+
+If a finding only reproduces in staging, the retest should confirm the fix in staging and, where possible, verify the control in production separately. Closing a ticket on the basis of a staging retest is normal practice — the caveat is knowing that is what happened.
+
+## A note on production testing
+
+Testing production has its own risks, but it removes the largest caveat in the report. Where it is safe to do so — read-only verification of a specific finding, within an agreed window, with the client's team available — it is often worth more than testing a staging environment twice.
+
+The decision is a trade between operational risk and evidential strength. Making it explicitly, in the scope document, is the difference between an assessment that informs decisions and one that starts an argument.

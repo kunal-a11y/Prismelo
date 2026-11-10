@@ -1,0 +1,141 @@
+---
+title: Community integration
+description: The data model, API contract and authentication requirements needed to connect the community frontend to a live backend.
+status: Published
+---
+
+The community section at [/community](/community) is implemented as a complete frontend over a clearly defined data layer. This page documents the current state and the exact integration points required to make it live.
+
+<Callout title="Current state" tone="draft">
+  There is no production backend connected to the community pages. Discussions, comments and profiles shown in the interface are **sample content**, labelled as such in the UI. Reading works against seeded data; authentication-gated actions open an explicit "accounts are not available yet" notice instead of simulating a write.
+</Callout>
+
+## What exists today
+
+| Capability | State |
+| --- | --- |
+| Browse categories | Implemented, reads `lib/community.ts` |
+| Read discussions and comments | Implemented, seeded data |
+| Search and sort | Implemented, client-side filter |
+| Public profiles | Implemented, seeded data |
+| Create discussion / comment | Gated UI, no persistence |
+| Vote / bookmark / report | Gated UI, no persistence |
+
+## Data model
+
+A backend implementation should provide at minimum the following entities.
+
+```sql
+create table profiles (
+  id            text primary key,      -- from the auth provider subject
+  username      text unique not null,
+  display_name  text not null,
+  bio           text,
+  created_at    timestamptz not null default now()
+);
+
+create table discussions (
+  id            uuid primary key default gen_random_uuid(),
+  category_slug text not null,
+  author_id     text not null references profiles(id),
+  title         text not null,
+  body          text not null,
+  created_at    timestamptz not null default now(),
+  reply_count   integer not null default 0,
+  score         integer not null default 0
+);
+
+create table comments (
+  id            uuid primary key default gen_random_uuid(),
+  discussion_id uuid not null references discussions(id) on delete cascade,
+  author_id     text not null references profiles(id),
+  parent_id     uuid references comments(id) on delete cascade,
+  body          text not null,
+  created_at    timestamptz not null default now()
+);
+```
+
+Votes, bookmarks and reports follow the same pattern: a join table keyed by `(user_id, target_id)`, with a uniqueness constraint that makes repeat actions idempotent.
+
+## API contract
+
+```ts
+// GET /api/community/discussions?category=security&q=token&sort=latest&page=1
+type DiscussionListResponse = {
+  items: {
+    id: string;
+    slug: string;
+    title: string;
+    excerpt: string;
+    category: string;
+    author: { username: string; displayName: string };
+    createdAt: string;
+    replyCount: number;
+    score: number;
+  }[];
+  total: number;
+  page: number;
+};
+```
+
+Write endpoints:
+
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| `POST` | `/api/community/discussions` | Required | Create discussion |
+| `POST` | `/api/community/discussions/:id/comments` | Required | Reply |
+| `POST` | `/api/community/discussions/:id/vote` | Required | Idempotent vote |
+| `POST` | `/api/community/discussions/:id/bookmark` | Required | Idempotent bookmark |
+| `POST` | `/api/community/reports` | Required | Report content |
+
+## Authentication requirements
+
+Any write endpoint must:
+
+1. Resolve the session server-side and derive `author_id` from the session subject. Never accept a user id from the request body.
+2. Reject requests whose `Origin` does not match the site origin.
+3. Validate and length-limit every text field before storing it.
+4. Return `401` for anonymous writes and `403` for authenticated users without permission.
+5. Keep personal data out of logs.
+
+Read endpoints can remain public, but must not expose email addresses or moderation metadata.
+
+## Example server check
+
+```ts
+export async function POST(request: Request) {
+  const session = await requireSession(request); // your auth integration
+  if (!session) return Response.json({ error: "unauthorized" }, { status: 401 });
+
+  if (!isSameOrigin(request)) {
+    return Response.json({ error: "forbidden" }, { status: 403 });
+  }
+
+  const body = await request.json();
+  const parsed = createDiscussionSchema.safeParse(body);
+  if (!parsed.success) {
+    return Response.json({ error: "validation_failed" }, { status: 400 });
+  }
+
+  const discussion = await db.discussions.create({
+    ...parsed.data,
+    authorId: session.user.id, // derived, never supplied by the client
+  });
+
+  return Response.json({ discussion }, { status: 201 });
+}
+```
+
+## Replacing the sample data
+
+The seeded data lives in one module, `lib/community.ts`. To connect a backend:
+
+1. Replace the exported read helpers with server-side fetches to the endpoints above.
+2. Pass the resolved user session into the discussion detail and composer components.
+3. Replace the gated action notices with real mutations, including optimistic vote updates and error rollback.
+4. Add loading and empty states for each fetch — the components already accept them.
+5. Remove the "sample content" label from the UI once live data is in place.
+
+## Interface states
+
+The frontend already implements empty search results, skeleton loading routes and error boundaries. When a backend is connected, keep those states rather than collapsing them into a single "nothing here" view — a failed request and an empty result should not look the same.

@@ -1,0 +1,61 @@
+---
+title: Designing a component system that survives a rebrand
+description: A monochrome design system is easy to restyle only if the tokens were real from the beginning.
+category: Design
+date: 2026-10-16
+---
+
+Most design systems are a component library with a colour palette attached. That works until the palette changes, at which point the team discovers that half the interface was styled by hand and the "system" was a naming convention.
+
+## Tokens before components
+
+The useful abstraction boundary is not the button. It is the value the button consumes.
+
+A small token set covers more than it seems:
+
+- **surface** — page, panel, raised panel
+- **ink** — primary text, secondary text, disabled text
+- **line** — hairline borders, dividers
+- **space** — a consistent scale, not arbitrary pixel values
+- **radius** — one or two values, used consistently
+- **motion** — duration and easing, defined once
+
+With those in place, a monochrome identity is nearly a configuration. Without them, every section is a small act of design judgement that will not survive contact with a second author.
+
+```css
+@theme {
+  --color-base: #000000;
+  --color-surface: #0a0a0a;
+  --color-line: #252525;
+  --color-ink: #ffffff;
+  --color-muted: #a0a0a0;
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+}
+```
+
+## One type scale, applied strictly
+
+Editorial layouts live or die on hierarchy. A fluid scale — `clamp` for display sizes, fixed sizes for body — keeps a page composed at every viewport without a breakpoint for each heading.
+
+The discipline that matters is refusing local overrides. The moment one section uses 23px because it looked better, the scale is decorative rather than structural.
+
+## Layout primitives, not layout wrappers
+
+Two primitives cover most of a corporate site:
+
+- a **shell** that owns horizontal rhythm and maximum width
+- a **section** that owns vertical rhythm and optional border treatment
+
+Everything else composes those. It sounds restrictive, and that restriction is the point: pages differ in composition, not in spacing logic.
+
+## Motion as a token
+
+Motion should be one or two behaviours — a short reveal, a hover transition — with a single easing curve. Multiple durations and easings used ad hoc read as inconsistency even when nobody can name it.
+
+Respect `prefers-reduced-motion` at the token level, not per component. Then every animation inherits the correct behaviour, including the ones added later by someone else.
+
+## What actually survives
+
+A rebrand changes colour and type. If those were tokens, it is an afternoon. If they were values scattered across two hundred files, it is a quarter.
+
+The test is simple: change the token file and see what breaks. Anything that breaks was never part of the system.

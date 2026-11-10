@@ -1,0 +1,49 @@
+---
+title: The case for boring infrastructure
+description: A small team operating four components will outperform a small team that inherited twelve.
+category: Infrastructure
+date: 2026-09-30
+---
+
+There is a particular kind of infrastructure diagram that appears whenever a small service is deployed: load balancer, two container services, a managed queue, a cache, three databases and a CDN. Each component has a reasonable justification. Together they exceed the team's ability to operate them.
+
+## Complexity is an operating cost
+
+Every component adds failure modes, upgrade paths, access policies, dashboards and alerts. The cost is not the monthly bill — it is the attention required to keep it working and the knowledge required to debug it at an inconvenient hour.
+
+A team that understands four components will run them well. A team that inherited twelve will operate all of them adequately at best, and one of them badly.
+
+## A defensible baseline
+
+For a small internal service, a reasonable starting point looks like this:
+
+- one runtime, with a documented deploy process
+- one managed relational database
+- backups, with a restore that has actually been performed
+- logs and basic metrics in one place
+- TLS and a sensible access policy
+
+That is a genuinely reliable system for many workloads. It is also small enough that a new engineer can hold it in their head within a week.
+
+## Add components for a failure mode
+
+The rule we use: a new component must name the failure mode it addresses. Not "scalability" in the abstract, but "the worker process dies under a burst of uploads, so the job needs to be durable and retried elsewhere".
+
+Naming the failure mode does three things. It justifies the operational cost, it defines what to monitor, and it gives a future engineer permission to remove the component if the failure mode disappears.
+
+## Make the boring parts visible
+
+Infrastructure that is genuinely dependable is quiet, which makes it easy for stakeholders to assume nothing is happening. Documentation helps:
+
+- a diagram with the components and their data flows
+- a runbook for routine tasks and known incidents
+- a restore procedure with the date it was last tested
+- a note on what is deliberately not implemented, and why
+
+That last item is underrated. Writing down "we do not have multi-region failover because the recovery objective is four hours" prevents the same conversation every quarter.
+
+## When boring is wrong
+
+This is not an argument for under-engineering. Systems with genuine availability requirements, regulatory constraints or heavy burst loads need the components that meet them. The distinction is whether the complexity is demanded by the workload or inherited from a template.
+
+The test is not "is this modern?" It is "can the people who operate this explain why each part exists?"

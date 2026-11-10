@@ -1,0 +1,43 @@
+---
+title: Engagement process
+description: The phases of a Prismelo engagement, from scoping through handover, and how changes are handled.
+status: Published
+---
+
+Every engagement is scoped individually, but the shape is consistent. It exists to keep scope honest and progress visible.
+
+## Phases
+
+<Steps items={[
+  { title: "Discovery", body: "A short conversation and, where useful, a review of existing systems. The objective is to understand the problem, the constraints and the decision that needs making." },
+  { title: "Written scope", body: "A document covering deliverables, exclusions, assumptions, access requirements, timing and the criteria for completion. This is the reference for the rest of the work." },
+  { title: "Delivery", body: "Work proceeds in reviewable increments. For builds, that means working software and a running environment early. For assessments, it means interim findings before the final report." },
+  { title: "Review", body: "Each increment is reviewed against the agreed criteria. Findings or defects are handled before the next increment, not accumulated at the end." },
+  { title: "Handover", body: "Documentation, a walkthrough session and an agreed support period so your team can own the result." }
+]} />
+
+## Change control
+
+Scope changes are normal. They are handled explicitly:
+
+1. The change is described in writing — what is added, removed or adjusted.
+2. The effect on timing and cost is stated.
+3. Work continues on the agreed scope until the change is accepted.
+
+Nothing is quietly absorbed into the schedule. If an addition would compromise the delivery date, we will say so before it happens.
+
+## What completion means
+
+An engagement is complete when the agreed deliverables exist, have been reviewed against the scope, and have been handed over with documentation. For security assessments, that includes the findings register and the remediation walkthrough. For builds, it includes the repository, environment configuration and handover notes.
+
+<Callout title="When we would stop" tone="note">
+  If an evaluation shows that a proposed approach will not work — an AI use case without sufficient data, a rewrite that is riskier than the existing system — we will report that rather than continue to bill against a conclusion that has changed.
+</Callout>
+
+## Timing
+
+Timelines are agreed per engagement after scoping. Estimates are based on the defined scope; where a delivery date depends on a third party (a vendor, an approval, an infrastructure provider), that dependency is stated in the scope document rather than assumed.
+
+## Documentation as part of delivery
+
+Written output is produced during the work, not reconstructed at the end. Architecture decisions, assessment findings and operating procedures are recorded as they are made, which is also why the handover is a conversation about documents that already exist.

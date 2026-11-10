@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="t" x1="8" y1="25" x2="50" y2="1" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f1f1f1"/>
+      <stop offset=".45" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#ffffff"/>
+    </linearGradient>
+    <linearGradient id="tr" x1="52" y1="2" x2="94" y2="24" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffffff"/>
+      <stop offset=".6" stop-color="#fbfbfb"/>
+      <stop offset="1" stop-color="#ececec"/>
+    </linearGradient>
+    <linearGradient id="f" x1="94" y1="24" x2="50" y2="100" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f0f0f0"/>
+      <stop offset=".45" stop-color="#dcdcdc"/>
+      <stop offset="1" stop-color="#bcbcbc"/>
+    </linearGradient>
+    <linearGradient id="s" x1="7" y1="74" x2="48" y2="98" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#585858"/>
+      <stop offset=".55" stop-color="#333333"/>
+      <stop offset="1" stop-color="#161616"/>
+    </linearGradient>
+    <clipPath id="c">
+      <path d="M50 0 94 23 94 73 50 100 6 73 50 46 6 23Z"/>
+    </clipPath>
+  </defs>
+  <g transform="translate(50 50) scale(0.96) translate(-50 -50)" clip-path="url(#c)">
+    <path d="M6 23 50 0 50 46Z" fill="url(#t)"/>
+    <path d="M50 0 94 23 50 46Z" fill="url(#tr)"/>
+    <path d="M50 46 94 23 94 73 50 100Z" fill="url(#f)"/>
+    <path d="M50 46 6 73 50 100Z" fill="url(#s)"/>
+  </g>
+  <g transform="translate(50 50) scale(0.96) translate(-50 -50)">
+    <path d="M50 0 94 23 94 73 50 100 6 73 50 46 6 23Z" fill="none" stroke="#8f8f8f" stroke-opacity=".45" stroke-width="1.6" stroke-linejoin="round"/>
+  </g>
+</svg>

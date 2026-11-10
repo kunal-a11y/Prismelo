@@ -1,0 +1,65 @@
+---
+title: Measuring an AI feature before you build it
+description: If you cannot describe the baseline and the failure cost, you are not ready to build an AI feature.
+category: AI
+date: 2026-10-08
+---
+
+The most expensive AI feature is the one that ships, appears to work, and slowly degrades in a way nobody measures. Most of that risk is decided before any code is written — in whether a baseline and a failure cost were defined.
+
+## Start with the current process
+
+Write down what happens today, even if the answer is "a person reads the email and types it into the system".
+
+- How long does the task take?
+- What is the error rate?
+- What does an error cost, and who catches it?
+- How many examples per day, week or month?
+
+Without these numbers, "the AI is good" is not a claim anyone can evaluate. With them, a modest model that matches the human baseline is a real improvement, and a fluent model that is wrong twice as often is a visible regression.
+
+## Define the failure cost honestly
+
+Some tasks tolerate error. Drafting a summary does. Extracting an amount from an invoice and writing it to a ledger does not. The design follows from that distinction:
+
+- **Tolerable errors** — generate, show, let a human accept or edit.
+- **Costly errors** — extract, then validate against an independent rule before writing.
+- **Unrecoverable errors** — do not automate the write; automate the preparation only.
+
+An AI feature that quietly encodes a costly error as tolerable is a liability, however good the demo looks.
+
+## Build the evaluation set first
+
+A small set of real examples — a hundred is often enough to start — with agreed correct answers. This is the least glamorous part of the work and the only part that tells you whether the feature is ready.
+
+```ts
+type EvalCase = {
+  id: string;
+  input: string;
+  expected: string;
+  severity: "tolerable" | "costly";
+};
+
+type EvalResult = {
+  id: string;
+  output: string;
+  correct: boolean;
+  latencyMs: number;
+};
+```
+
+Two numbers matter: pass rate on the set, and pass rate weight-adjusted by severity. A model that is 95% accurate overall but fails half the costly cases is not ready, whatever the headline number says.
+
+## Measure the retrieval separately
+
+For retrieval-augmented systems, most quality problems are retrieval problems wearing a generation costume. Check whether the right document was retrieved before blaming the model for a poor answer. If a human with the same retrieved context could answer correctly, the retrieval is adequate and the generation step needs work.
+
+## Plan the operating cost
+
+Token spend, latency and review time all scale with usage. A feature that costs nothing to demo can be expensive at volume. Model routing, caching and a smaller model for the easy majority are engineering decisions, not optimisations to defer.
+
+## The stopping condition
+
+Before building, agree what result would make you stop. If the evaluation shows no improvement over the baseline, that should be a successful experiment — not a reason to lower the bar until the project can be declared a win.
+
+That single agreement prevents more disappointing AI projects than any technical choice.
