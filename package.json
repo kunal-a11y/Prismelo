@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "tsc --noEmit",
+    "setup:env": "node scripts/setup-env.mjs",
     "new:post": "node scripts/new-post.mjs"
   },
   "dependencies": {

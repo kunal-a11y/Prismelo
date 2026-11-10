@@ -280,6 +280,29 @@ the `/admin` API routes run on the Node.js runtime. Set the delivery environment
 variables in the deployment environment if email is to be sent, and
 `ADMIN_PASSWORD` if the admin area is to accept sign-ins.
 
+### Setting the environment with one command
+
+Secrets never live in this repository. `.env.example` documents every variable
+with placeholder values; the real values are written on the machine that runs
+the site:
+
+```bash
+npm run setup:env              # writes .env.production, used by npm start
+npm run setup:env -- --local   # writes .env.local, used by npm run dev
+```
+
+The script asks for each value, offers sensible defaults, keeps any value you
+previously saved, masks secrets on screen, and generates random session secrets
+when you leave those blank. Both files are git-ignored, and the written file is
+chmod 600. Next.js loads `.env.production` automatically for production builds,
+so `npm run build && npm start` picks the values up without any dashboard
+configuration.
+
+Run it after cloning on the server, or once per environment. A host that builds
+from a git remote and has no shell — Vercel, for example — cannot read a file
+that was never committed; there the values belong in the host's own environment
+settings, and `scripts/setup-env.mjs` is only useful locally.
+
 The admin area and the forum both need a writable filesystem. On a serverless
 deployment the filesystem is ephemeral, so posts, threads and the email list
 written there would disappear on redeploy — keep the site on a Node server, or
