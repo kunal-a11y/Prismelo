@@ -57,8 +57,22 @@ function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
 
 /* ------------------------------------------------------------------ passwords */
 
-async function derive(password: string, salt: Uint8Array, iterations: number): Promise<Uint8Array> {
-  const key = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveBits"]);
+/**
+ * A server-side pepper: HMAC-SHA256(pepper, password) before key stretching.
+ * Salts stop one rainbow table from covering every account; the pepper stops a
+ * stolen database from being crackable at all, because the key is not in it.
+ */
+async function prehash(password: string, pepper: string): Promise<Uint8Array> {
+  if (!pepper) return encoder.encode(password);
+  const key = await crypto.subtle.importKey("raw", encoder.encode(pepper), { name: "HMAC", hash: "SHA-256" }, false, [
+    "sign",
+  ]);
+  const mac = await crypto.subtle.sign("HMAC", key, encoder.encode(password));
+  return new Uint8Array(mac);
+}
+
+async function derive(secret: Uint8Array, salt: Uint8Array, iterations: number): Promise<Uint8Array> {
+  const key = await crypto.subtle.importKey("raw", secret, "PBKDF2", false, ["deriveBits"]);
   const bits = await crypto.subtle.deriveBits(
     { name: "PBKDF2", hash: "SHA-256", salt, iterations },
     key,
@@ -67,20 +81,46 @@ async function derive(password: string, salt: Uint8Array, iterations: number): P
   return new Uint8Array(bits);
 }
 
-export async function hashPassword(password: string): Promise<string> {
+export async function hashPassword(password: string, pepper = ""): Promise<string> {
   const salt = crypto.getRandomValues(new Uint8Array(16));
-  const hash = await derive(password, salt, PBKDF2_ITERATIONS);
-  return `pbkdf2:${PBKDF2_ITERATIONS}:${b64urlFromBytes(salt)}:${b64urlFromBytes(hash)}`;
+  const hash = await derive(await prehash(password, pepper), salt, PBKDF2_ITERATIONS);
+  // `pbkdf2h` means peppered, so a hash can never be verified under the wrong
+  // scheme by accident.
+  const scheme = pepper ? "pbkdf2h" : "pbkdf2";
+  return `${scheme}:${PBKDF2_ITERATIONS}:${b64urlFromBytes(salt)}:${b64urlFromBytes(hash)}`;
 }
 
-export async function verifyPassword(password: string, stored: string): Promise<boolean> {
+export async function verifyPassword(password: string, stored: string, pepper = ""): Promise<boolean> {
   const [scheme, iterations, salt, hash] = stored.split(":");
-  if (scheme !== "pbkdf2" || !iterations || !salt || !hash) return false;
+  if (!iterations || !salt || !hash) return false;
+  if (scheme !== "pbkdf2" && scheme !== "pbkdf2h") return false;
+  // A peppered hash cannot be checked without the pepper, and an unpeppered one
+  // must not silently pass in a peppered deployment.
+  if (scheme === "pbkdf2h" && !pepper) return false;
+
   const rounds = Number(iterations);
   if (!Number.isInteger(rounds) || rounds < 10_000) return false;
 
-  const candidate = await derive(password, bytesFromB64url(salt), rounds);
+  const secret = await prehash(password, scheme === "pbkdf2h" ? pepper : "");
+  const candidate = await derive(secret, bytesFromB64url(salt), rounds);
   return constantTimeEqual(candidate, bytesFromB64url(hash));
+}
+
+/**
+ * Character-by-character comparison that always looks at every character.
+ *
+ * `a === b` stops at the first difference, so its running time hints at how
+ * much of the input was right. This walks the longer string to the end and
+ * folds in the length, so "", "a", "aa" and a fully wrong password all cost the
+ * same and the result is a single boolean at the very end.
+ */
+export function slowEquals(a: string, b: string): boolean {
+  const length = Math.max(a.length, b.length);
+  let diff = a.length ^ b.length;
+  for (let index = 0; index < length; index += 1) {
+    diff |= (a.charCodeAt(index) || 0) ^ (b.charCodeAt(index) || 0);
+  }
+  return diff === 0;
 }
 
 /* ------------------------------------------------------------------- sessions */

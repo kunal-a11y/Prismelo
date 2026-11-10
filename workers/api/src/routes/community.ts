@@ -21,6 +21,7 @@ import {
   verifyPassword,
 } from "../auth";
 import {
+  audit,
   createReply,
   createThread,
   findThreadBySlug,
@@ -114,8 +115,10 @@ export async function register(ctx: Ctx): Promise<Response> {
     username: await uniqueUsername(ctx, name!, email!),
     name: name!,
     email: email!,
-    passwordHash: await hashPassword(password),
+    passwordHash: await hashPassword(password, ctx.env.PASSWORD_PEPPER ?? ""),
   });
+
+  await audit(ctx.env, { event: "community.register", subject: user.username, ip: clientKey(ctx) });
 
   const token = await createCommunityToken(ctx.env, user.id);
   return sessionResponse(ctx, user, token);
@@ -145,13 +148,22 @@ export async function login(ctx: Ctx): Promise<Response> {
 
   // Same message and roughly the same work for "no such account" and "wrong
   // password", so the response cannot be used to enumerate accounts.
-  const valid = user ? await verifyPassword(password, user.passwordHash) : false;
+  const valid = user
+    ? await verifyPassword(password, user.passwordHash, ctx.env.PASSWORD_PEPPER ?? "")
+    : false;
   if (!user || !valid) {
+    await audit(ctx.env, {
+      event: user ? "community.login_failed" : "community.login_unknown",
+      subject: user?.username ?? "",
+      ip: clientKey(ctx),
+    });
     return json(
       { error: "Email or password is incorrect." },
       { status: 401, env: ctx.env, request: ctx.request },
     );
   }
+
+  await audit(ctx.env, { event: "community.login", subject: user.username, ip: clientKey(ctx) });
 
   const token = await createCommunityToken(ctx.env, user.id);
   return sessionResponse(ctx, user, token);

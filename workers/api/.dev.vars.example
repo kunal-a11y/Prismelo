@@ -4,6 +4,13 @@ ADMIN_PASSWORD=change-me-to-something-long
 ADMIN_SESSION_SECRET=generate-a-64-character-random-string
 COMMUNITY_SESSION_SECRET=generate-a-different-64-character-string
 
+# Encryption at rest for personal data, and the pepper mixed into password
+# hashes. Both must be 32 random bytes; generate with:
+#   node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+# Losing DATA_KEY makes every stored email address unrecoverable.
+DATA_KEY=
+PASSWORD_PEPPER=
+
 # Optional locally: without these, mail paths answer 501 (not configured),
 # which is exactly what the smoke test asserts.
 # SMTP_USER=c26ad7001@smtp-brevo.com

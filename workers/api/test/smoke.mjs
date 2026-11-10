@@ -58,6 +58,17 @@ async function main() {
   // both answers are correct. Assert the one that applies rather than assuming.
   const mailConfigured = health.data.mail === "configured";
 
+  check(
+    "health reports at-rest encryption",
+    health.data.encryption === "configured",
+    `encryption=${health.data.encryption}`,
+  );
+  check(
+    "health reports a password pepper",
+    health.data.passwordPepper === "configured",
+    `pepper=${health.data.passwordPepper}`,
+  );
+
   const index = await call("/");
   check("GET / identifies the service", index.status === 200 && index.data.service === "prismelo-api", JSON.stringify(index.data));
 
@@ -141,6 +152,16 @@ async function main() {
   const me = await call("/api/community/me", { token });
   check("Bearer token identifies the member", me.status === 200 && me.data.user?.username, `${me.status} ${JSON.stringify(me.data)}`);
 
+  check(
+    "member response never includes the email address",
+    me.status === 200 && !Object.prototype.hasOwnProperty.call(me.data.user ?? {}, "email"),
+    JSON.stringify(me.data.user),
+  );
+
+  const tampered = `${token.slice(0, -2)}${token.slice(-2) === "aa" ? "bb" : "aa"}`;
+  const tamperedMe = await call("/api/community/me", { token: tampered });
+  check("a tampered session token is rejected", tamperedMe.status === 401, `${tamperedMe.status}`);
+
   const noAuthThread = await call("/api/community/threads", {
     method: "POST",
     body: { title: "Anonymous attempt", category: "General", body: "x".repeat(40) },
@@ -170,6 +191,10 @@ async function main() {
 
   const badLogin = await call("/api/community/login", { method: "POST", body: { email, password: "wrong-password" } });
   check("wrong password returns 401", badLogin.status === 401, `${badLogin.status}`);
+
+  // One character off must fail exactly like any other wrong password.
+  const nearMiss = await call("/api/community/login", { method: "POST", body: { email, password: "correct-horse-batterY" } });
+  check("a near-miss password is refused", nearMiss.status === 401, `${nearMiss.status}`);
 
   const login = await call("/api/community/login", { method: "POST", body: { email, password: "correct-horse-battery" } });
   check("correct password signs in", login.status === 200 && Boolean(login.data.token), `${login.status}`);
@@ -218,6 +243,18 @@ async function main() {
 
   // With mail configured this would post a real notice to every subscriber, so
   // assert the guard instead: an empty notice must be refused before sending.
+  const auditLog = await call("/api/admin/audit", { token: adminToken });
+  const events = auditLog.data.events ?? [];
+  check(
+    "audit log records admin sign-ins and refusals",
+    auditLog.status === 200 && events.some((entry) => entry.event === "admin.login") && events.some((entry) => entry.event === "admin.login_failed"),
+    `${auditLog.status} events=${events.length}`,
+  );
+  check(
+    "audit log never stores a password or token",
+    !JSON.stringify(events).includes(adminToken) && !JSON.stringify(events).includes(ADMIN_PASSWORD),
+  );
+
   const legal = mailConfigured
     ? await call("/api/admin/notify-legal", { method: "POST", body: {}, token: adminToken })
     : await call("/api/admin/notify-legal", {

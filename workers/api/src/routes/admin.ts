@@ -7,10 +7,13 @@ import {
   createAdminToken,
   requestToken,
   sessionCookie,
+  slowEquals,
   slugify,
   verifyAdminToken,
 } from "../auth";
 import {
+  audit,
+  recentAudit,
   deletePost,
   deleteReply,
   deleteSubscriber,
@@ -59,17 +62,15 @@ export async function login(ctx: Ctx): Promise<Response> {
   const given = typeof parsed.data.password === "string" ? parsed.data.password : "";
   const expected = ctx.env.ADMIN_PASSWORD ?? "";
 
-  // Compare digests, not the raw strings, so the comparison is the same length
-  // whatever the password is and the answer never depends on where it differs.
-  const digest = async (value: string) =>
-    new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)));
-  const [a, b] = await Promise.all([digest(given), digest(expected)]);
-  let diff = a.length ^ b.length;
-  for (let index = 0; index < a.length; index += 1) diff |= a[index] ^ b[index];
-
-  if (diff !== 0) {
+  // Compared character by character to the end of the longer string, with the
+  // length folded in. `given === expected` would return at the first wrong
+  // character, and that timing is a usable oracle when guessing a password.
+  if (!slowEquals(given, expected)) {
+    await audit(ctx.env, { event: "admin.login_failed", ip: clientKey(ctx) });
     return json({ error: "Incorrect password." }, { status: 401, env: ctx.env, request: ctx.request });
   }
+
+  await audit(ctx.env, { event: "admin.login", ip: clientKey(ctx) });
 
   const token = await createAdminToken(ctx.env);
   return json(
@@ -268,6 +269,12 @@ export async function removeSubscriber(ctx: Ctx): Promise<Response> {
 export async function mailLog(ctx: Ctx): Promise<Response> {
   if (!(await isAdmin(ctx))) return unauthorised(ctx);
   return json({ mail: await recentMail(ctx.env) }, { env: ctx.env, request: ctx.request });
+}
+
+/** Sign-in and moderation history, for answering "was that me?" later. */
+export async function auditLog(ctx: Ctx): Promise<Response> {
+  if (!(await isAdmin(ctx))) return unauthorised(ctx);
+  return json({ events: await recentAudit(ctx.env) }, { env: ctx.env, request: ctx.request });
 }
 
 /* -------------------------------------------------------------- legal notice */

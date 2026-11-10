@@ -7,6 +7,7 @@
  */
 
 import type { Env } from "./http";
+import { blindIndex, decryptField, encryptField } from "./crypto";
 
 export type User = {
   id: string;
@@ -87,12 +88,15 @@ type UserRow = {
   created_at: string;
 };
 
-function toUser(row: UserRow): User {
+/** Email is ciphertext in the row; a value that will not decrypt is dropped. */
+async function toUser(env: Env, row: UserRow): Promise<User | null> {
+  const email = await decryptField(env, row.email);
+  if (email === null) return null;
   return {
     id: row.id,
     username: row.username,
     name: row.name,
-    email: row.email,
+    email,
     passwordHash: row.password_hash,
     bio: row.bio,
     createdAt: row.created_at,
@@ -103,14 +107,21 @@ export function publicUser(user: User): PublicUser {
   return { id: user.id, username: user.username, name: user.name, bio: user.bio, createdAt: user.createdAt };
 }
 
+/**
+ * Looks up by blind index, falling back to the plain column so rows written
+ * before encryption was enabled still resolve.
+ */
 export async function findUserByEmail(env: Env, email: string): Promise<User | null> {
-  const row = await env.DB.prepare("SELECT * FROM users WHERE email = ?").bind(email).first<UserRow>();
-  return row ? toUser(row) : null;
+  const index = await blindIndex(env, email);
+  const row = await env.DB.prepare("SELECT * FROM users WHERE email_index = ? OR email = ?")
+    .bind(index, email.trim().toLowerCase())
+    .first<UserRow>();
+  return row ? toUser(env, row) : null;
 }
 
 export async function findUserById(env: Env, id: string): Promise<User | null> {
   const row = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(id).first<UserRow>();
-  return row ? toUser(row) : null;
+  return row ? toUser(env, row) : null;
 }
 
 export async function usernameTaken(env: Env, username: string): Promise<boolean> {
@@ -132,10 +143,15 @@ export async function createUser(
     createdAt: nowIso(),
   };
 
+  const [storedEmail, index] = await Promise.all([
+    encryptField(env, user.email),
+    blindIndex(env, user.email),
+  ]);
+
   await env.DB.prepare(
-    "INSERT INTO users (id, username, name, email, password_hash, bio, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO users (id, username, name, email, email_index, password_hash, bio, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
   )
-    .bind(user.id, user.username, user.name, user.email, user.passwordHash, user.bio, user.createdAt)
+    .bind(user.id, user.username, user.name, storedEmail, index, user.passwordHash, user.bio, user.createdAt)
     .run();
 
   return user;
@@ -355,10 +371,12 @@ type SubscriberRow = {
   unsubscribed_at: string | null;
 };
 
-function toSubscriber(row: SubscriberRow): Subscriber {
+async function toSubscriber(env: Env, row: SubscriberRow): Promise<Subscriber | null> {
+  const email = await decryptField(env, row.email);
+  if (email === null) return null;
   return {
     id: row.id,
-    email: row.email,
+    email,
     source: row.source,
     token: row.token,
     createdAt: row.created_at,
@@ -372,13 +390,20 @@ export async function addSubscriber(
   email: string,
   source: "resources" | "community",
 ): Promise<{ subscriber: Subscriber; created: boolean }> {
-  const existing = await env.DB.prepare("SELECT * FROM subscribers WHERE email = ?").bind(email).first<SubscriberRow>();
+  const index = await blindIndex(env, email);
+  const existing = await env.DB.prepare("SELECT * FROM subscribers WHERE email_index = ? OR email = ?")
+    .bind(index, email)
+    .first<SubscriberRow>();
+
   if (existing) {
-    if (existing.unsubscribed_at) {
-      await env.DB.prepare("UPDATE subscribers SET unsubscribed_at = NULL WHERE id = ?").bind(existing.id).run();
-      return { subscriber: { ...toSubscriber(existing), unsubscribedAt: null }, created: false };
+    const found = await toSubscriber(env, existing);
+    if (found) {
+      if (existing.unsubscribed_at) {
+        await env.DB.prepare("UPDATE subscribers SET unsubscribed_at = NULL WHERE id = ?").bind(existing.id).run();
+        return { subscriber: { ...found, unsubscribedAt: null }, created: false };
+      }
+      return { subscriber: found, created: false };
     }
-    return { subscriber: toSubscriber(existing), created: false };
   }
 
   const subscriber: Subscriber = {
@@ -391,9 +416,16 @@ export async function addSubscriber(
   };
 
   await env.DB.prepare(
-    "INSERT INTO subscribers (id, email, source, token, created_at, unsubscribed_at) VALUES (?, ?, ?, ?, ?, NULL)",
+    "INSERT INTO subscribers (id, email, email_index, source, token, created_at, unsubscribed_at) VALUES (?, ?, ?, ?, ?, ?, NULL)",
   )
-    .bind(subscriber.id, subscriber.email, subscriber.source, subscriber.token, subscriber.createdAt)
+    .bind(
+      subscriber.id,
+      await encryptField(env, subscriber.email),
+      index,
+      subscriber.source,
+      subscriber.token,
+      subscriber.createdAt,
+    )
     .run();
 
   return { subscriber, created: true };
@@ -410,7 +442,10 @@ export async function unsubscribeByToken(env: Env, token: string): Promise<boole
 
 export async function listSubscribers(env: Env): Promise<Subscriber[]> {
   const { results } = await env.DB.prepare("SELECT * FROM subscribers ORDER BY created_at DESC").all<SubscriberRow>();
-  return (results ?? []).map(toSubscriber);
+  const rows = await Promise.all((results ?? []).map((row) => toSubscriber(env, row)));
+  // A row whose ciphertext will not authenticate is not shown; it is not
+  // silently treated as empty either.
+  return rows.filter((row): row is Subscriber => row !== null);
 }
 
 export async function deleteSubscriber(env: Env, id: string): Promise<boolean> {
@@ -556,4 +591,46 @@ export async function hitRateLimit(env: Env, key: string, windowMs: number): Pro
     .first<{ count: number }>();
 
   return Number(row?.count ?? 1);
+}
+
+/* ----------------------------------------------------------------- audit log */
+
+/**
+ * Records a security event. Never called with a password, token or full email —
+ * an audit log that leaks what it audits is worse than none.
+ */
+export async function audit(
+  env: Env,
+  entry: { event: string; subject?: string; ip?: string; detail?: string },
+): Promise<void> {
+  try {
+    await env.DB.prepare(
+      "INSERT INTO audit_log (id, event, subject, ip, detail, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+    )
+      .bind(
+        newId("aud"),
+        entry.event,
+        entry.subject ?? "",
+        entry.ip ?? "",
+        (entry.detail ?? "").slice(0, 300),
+        nowIso(),
+      )
+      .run();
+
+    await env.DB.prepare(
+      "DELETE FROM audit_log WHERE id NOT IN (SELECT id FROM audit_log ORDER BY created_at DESC LIMIT 500)",
+    ).run();
+  } catch (error) {
+    // Logging must never break the request it is recording.
+    console.error("audit write failed", error);
+  }
+}
+
+export async function recentAudit(env: Env, limit = 50) {
+  const { results } = await env.DB.prepare(
+    "SELECT id, event, subject, ip, detail, created_at FROM audit_log ORDER BY created_at DESC LIMIT ?",
+  )
+    .bind(limit)
+    .all();
+  return results ?? [];
 }

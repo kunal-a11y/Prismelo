@@ -22,7 +22,7 @@ src/mail.ts           SMTP client over cloudflare:sockets + email template
 src/routes/*.ts       public, community and admin handlers
 migrations/0001_init.sql   D1 schema
 scripts/seed.mjs      turns content/resources/*.mdx into seed.sql
-test/smoke.mjs        34 end-to-end checks against a running worker
+test/smoke.mjs        41 end-to-end checks against a running worker
 ```
 
 ## Run it locally
@@ -48,7 +48,7 @@ draft visibility, subscriptions and rate limiting.
 
 ### Proven, locally
 
-- 34/34 smoke checks pass against `wrangler dev` with real local D1.
+- 41/41 smoke checks pass against `wrangler dev` with real local D1.
 - A contact submission sent **a real email through Brevo over TLS** (`POST /api/contact`
   returned `200` in ~1.2s, and D1 logged `sent` for `hello@prismelo.tech`).
 - No `nodejs_compat` flag and no Node built-ins: it is a pure Workers bundle.
@@ -77,6 +77,8 @@ npm run db:seed:remote
 npx wrangler secret put ADMIN_PASSWORD
 npx wrangler secret put ADMIN_SESSION_SECRET
 npx wrangler secret put COMMUNITY_SESSION_SECRET
+npx wrangler secret put DATA_KEY          # 32 random bytes, encrypts emails at rest
+npx wrangler secret put PASSWORD_PEPPER   # 32 random bytes, mixed into password hashes
 npx wrangler secret put SMTP_USER
 npx wrangler secret put SMTP_PASS
 
@@ -134,20 +136,51 @@ Errors are `{ error, fields? }` with the status that matches: `400` validation,
 
 ## Security notes
 
-- Passwords: PBKDF2-SHA256, 210k iterations, 16-byte random salt, stored as
-  `pbkdf2:iterations:salt:hash`. (The Next app used scrypt, which does not exist
-  outside Node — no accounts existed when this was written.)
-- Sessions: `payload.signature`, HMAC-SHA256, expiry inside the signed payload,
-  compared in constant time. Nothing is read from the payload before the
-  signature matches.
-- Admin password compared as SHA-256 digests, so timing does not leak length or
-  position of the first wrong character.
+- **Personal data at rest:** user and subscriber email addresses are AES-256-GCM
+  ciphertext (`enc:v1:<iv>:<ciphertext>`), so a leaked database dump or backup has
+  no addresses in it. GCM means a tampered value fails to decrypt instead of
+  yielding attacker-chosen text. Because ciphertext differs every time, lookups
+  and uniqueness go through an HMAC-SHA256 **blind index** derived from the same
+  key with a different HKDF label.
+- **Passwords:** HMAC-SHA256(pepper, password) then PBKDF2-SHA256 at 210k
+  iterations with a 16-byte random salt (`pbkdf2h:…`). Salts defeat rainbow
+  tables; the pepper (`PASSWORD_PEPPER`) means a stolen database cannot be
+  cracked offline without the Worker secret as well.
+- **Comparison:** the admin password is compared one character at a time to the
+  end of the longer string, with the length folded into the result —
+  `given === expected` would return at the first wrong character and leak a
+  position oracle. Password hashes use the same constant-time byte comparison.
+- **Sessions:** `payload.signature`, HMAC-SHA256, expiry inside the signed
+  payload. Nothing is read from the payload before the signature matches, and a
+  token edited by one character is refused (covered by a smoke check).
+- **Audit log:** admin and community sign-ins (successes and refusals) are
+  recorded with an IP and a username — never a password or token, which is
+  asserted by the smoke test. `GET /api/admin/audit` reads it.
+- **Headers on every response:** `no-store`, `nosniff`, `X-Frame-Options: DENY`,
+  `Referrer-Policy: no-referrer`, `Permissions-Policy`, HSTS and a
+  `default-src 'none'` CSP — the API returns JSON only, so it needs nothing.
 - All SQL uses bound parameters. Every route that mutates checks the origin.
 - Rate limits live in D1 (`rate_limits`), not in memory, so they survive a cold
   start and apply across isolates.
 - `wrangler secret put` keeps credentials out of `wrangler.jsonc` and git.
   `.dev.vars` is gitignored.
 - Uploaded post bodies are markdown text; the API never renders HTML from them.
+
+## About "end-to-end encryption"
+
+True end-to-end encryption means the server cannot read the data — keys never
+leave the client. That is impossible for this backend by definition: it renders
+threads, sends notification email and lets an admin moderate, so it must read
+what it stores. Implementing "E2E" here would either be theatre (a key stored
+next to the ciphertext) or break every feature above.
+
+What is implemented instead is the protection that actually applies:
+TLS in transit (Cloudflare terminates HTTPS, and SMTP runs over implicit TLS),
+AES-256-GCM at rest for personal data with the key outside the database, and
+blind indexes so encryption does not cost the ability to query. If you later
+want encrypted private messages where the server genuinely cannot read content,
+that is a different feature and needs client-side keys — say so and it can be
+designed properly.
 
 ## Why the code looks like this
 

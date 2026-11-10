@@ -23,6 +23,7 @@ import {
   threads,
 } from "./routes/community";
 import {
+  auditLog,
   communityThreads,
   createResource,
   deleteResource,
@@ -91,6 +92,7 @@ on("DELETE", "/api/admin/community/replies/:id", removeReply);
 on("GET", "/api/admin/community/subscribers", subscribers);
 on("DELETE", "/api/admin/community/subscribers/:id", removeSubscriber);
 on("GET", "/api/admin/mail", mailLog);
+on("GET", "/api/admin/audit", auditLog);
 on("POST", "/api/admin/notify-legal", notifyLegal);
 
 /* --------------------------------------------------------------------- router */

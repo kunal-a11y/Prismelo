@@ -9,6 +9,7 @@ import {
   type Ctx,
 } from "../http";
 import { getPost, hitRateLimit, listPosts, readingTime, recordMail, addSubscriber, unsubscribeByToken } from "../db";
+import { encryptionConfigured } from "../crypto";
 import { mailerConfigured, recipient, renderEmail, sendMail } from "../mail";
 
 /* -------------------------------------------------------------------- health */
@@ -28,6 +29,10 @@ export async function health(ctx: Ctx): Promise<Response> {
       storage,
       mail: mailerConfigured(ctx.env) ? "configured" : "missing",
       admin: Boolean(ctx.env.ADMIN_PASSWORD) ? "configured" : "missing",
+      // Personal data is only really protected when both of these are set;
+      // reporting them makes a half-configured deployment visible.
+      encryption: encryptionConfigured(ctx.env) ? "configured" : "missing",
+      passwordPepper: ctx.env.PASSWORD_PEPPER ? "configured" : "missing",
     },
     { status: storage === "ok" ? 200 : 503, env: ctx.env, request: ctx.request },
   );

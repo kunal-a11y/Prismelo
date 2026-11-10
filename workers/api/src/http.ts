@@ -28,6 +28,10 @@ export type Env = {
   ADMIN_SESSION_SECRET?: string;
   COMMUNITY_SESSION_SECRET?: string;
   COOKIE_DOMAIN?: string;
+  /** 32 random bytes (base64url or hex) that encrypt personal data at rest. */
+  DATA_KEY?: string;
+  /** Server-side pepper mixed into every password hash. */
+  PASSWORD_PEPPER?: string;
 };
 
 const DEFAULT_ORIGINS = [
@@ -75,6 +79,12 @@ export function json(
   headers.set("Content-Type", "application/json; charset=utf-8");
   headers.set("Cache-Control", "no-store");
   headers.set("X-Content-Type-Options", "nosniff");
+  headers.set("X-Frame-Options", "DENY");
+  headers.set("Referrer-Policy", "no-referrer");
+  headers.set("Cross-Origin-Resource-Policy", "same-site");
+  headers.set("Permissions-Policy", "geolocation=(), microphone=(), camera=(), payment=()");
+  headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  headers.set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'; base-uri 'none'");
   for (const [key, value] of Object.entries(init.headers ?? {})) headers.set(key, value);
   return new Response(JSON.stringify(body), { status: init.status ?? 200, headers });
 }
