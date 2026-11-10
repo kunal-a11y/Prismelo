@@ -17,6 +17,33 @@ import { cn } from "@/lib/utils";
  */
 type Pending = { node: HTMLElement; show: () => void };
 
+/**
+ * False until the first page has rendered. After that, any newly mounted
+ * reveal comes from a client-side navigation, where content already in view
+ * should appear immediately rather than fade in again.
+ *
+ * `PagePaintMarker` flips it from a layout effect that runs after the page's
+ * own effects, so the first page still animates in and later ones do not.
+ */
+let pagePainted = false;
+
+export function markPagePainted() {
+  pagePainted = true;
+}
+
+/** Mounted once in the root layout, after the page content in tree order. */
+export function PagePaintMarker() {
+  useEffect(() => {
+    markPagePainted();
+  }, []);
+  return null;
+}
+
+function inViewport(node: HTMLElement) {
+  const rect = node.getBoundingClientRect();
+  return rect.top < window.innerHeight && rect.bottom > 0;
+}
+
 const pending = new Set<Pending>();
 let ticker: number | undefined;
 
@@ -67,11 +94,19 @@ export function Reveal({
   once?: boolean;
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
+  const [instant, setInstant] = useState(false);
   const [shown, setShown] = useState(false);
 
   useEffect(() => {
     const node = ref.current;
     if (!node) return;
+
+    // Arrived by navigating here, already on screen: no reveal needed.
+    if (pagePainted && inViewport(node)) {
+      setInstant(true);
+      setShown(true);
+      return;
+    }
 
     if (typeof IntersectionObserver === "undefined") {
       setShown(true);
@@ -103,7 +138,12 @@ export function Reveal({
   return (
     <div
       ref={ref}
-      className={cn("reveal", shown && "reveal--in", className)}
+      className={cn(
+        "reveal",
+        shown && "reveal--in",
+        instant && "reveal--instant",
+        className,
+      )}
       style={
         {
           "--reveal-y": `${y}px`,
@@ -126,9 +166,16 @@ export function FadeIn({
   delay?: number;
   className?: string;
 }) {
+  const [instant, setInstant] = useState(false);
   const [shown, setShown] = useState(false);
 
   useEffect(() => {
+    if (pagePainted) {
+      setInstant(true);
+      setShown(true);
+      return;
+    }
+
     const frame = window.requestAnimationFrame(() => setShown(true));
     // rAF is starved in hidden tabs, so guarantee the fade completes anyway.
     const timer = window.setTimeout(() => setShown(true), 300);
@@ -140,7 +187,12 @@ export function FadeIn({
 
   return (
     <div
-      className={cn("fade-in", shown && "fade-in--in", className)}
+      className={cn(
+        "fade-in",
+        shown && "fade-in--in",
+        instant && "fade-in--instant",
+        className,
+      )}
       style={{ transitionDelay: delay ? `${delay}s` : undefined }}
     >
       {children}

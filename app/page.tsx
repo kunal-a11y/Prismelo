@@ -104,8 +104,11 @@ export default function HomePage() {
                 </div>
               </FadeIn>
 
-              <FadeIn delay={0.08}>
-                <h1 className="t-display mt-8 max-w-[15ch] text-white">
+              {/* Not wrapped in a fade: the headline paints at full opacity on
+                  first frame, so it is the LCP element immediately. The words
+                  still slide up, using transform only. */}
+              <div className="mt-8">
+                <h1 className="t-display max-w-[15ch] text-white">
                   {heroWords.map((word, index) => (
                     <Fragment key={`${word}-${index}`}>
                       <span
@@ -118,7 +121,7 @@ export default function HomePage() {
                     </Fragment>
                   ))}
                 </h1>
-              </FadeIn>
+              </div>
 
               <FadeIn delay={0.16}>
                 <p className="t-lead mt-8 max-w-[46ch]">

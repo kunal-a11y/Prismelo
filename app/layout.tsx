@@ -5,6 +5,7 @@ import { SiteHeader } from "@/components/site-header";
 import { SpotlightPointer } from "@/components/spotlight-pointer";
 import { SiteFooter } from "@/components/site-footer";
 import { NewsletterPrompt } from "@/components/community/newsletter-prompt";
+import { PagePaintMarker } from "@/components/reveal";
 import { site } from "@/lib/site";
 
 const geistSans = Geist({
@@ -84,6 +85,7 @@ export default function RootLayout({
         <main id="main">{children}</main>
         <SiteFooter />
         <NewsletterPrompt />
+        <PagePaintMarker />
       </body>
     </html>
   );
