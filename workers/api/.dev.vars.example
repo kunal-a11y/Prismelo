@@ -1,0 +1,10 @@
+# Local development secrets only — copy to .dev.vars (gitignored).
+# In production these are set with `wrangler secret put <NAME>`.
+ADMIN_PASSWORD=change-me-to-something-long
+ADMIN_SESSION_SECRET=generate-a-64-character-random-string
+COMMUNITY_SESSION_SECRET=generate-a-different-64-character-string
+
+# Optional locally: without these, mail paths answer 501 (not configured),
+# which is exactly what the smoke test asserts.
+# SMTP_USER=c26ad7001@smtp-brevo.com
+# SMTP_PASS=

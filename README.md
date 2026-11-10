@@ -35,6 +35,7 @@ The project is one Next.js app. Two short guides explain each half:
 | --- | --- |
 | [`docs/FRONTEND.md`](docs/FRONTEND.md) | Routes, component map, design tokens, animations, how to add a page, performance rules |
 | [`docs/BACKEND.md`](docs/BACKEND.md) | Server routes, file storage, admin and community auth, the email pipeline, environment variables, security posture |
+| [`workers/api/README.md`](workers/api/README.md) | The same API as a Cloudflare Worker with D1 storage: local dev, deploy steps, secrets |
 
 Quick version: `app/` and `components/` are the frontend, `app/api/` plus `lib/`
 are the backend, and `content/` holds everything written in Markdown.

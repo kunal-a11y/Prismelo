@@ -1,0 +1,22 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "prismelo-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "observability": { "enabled": true },
+  "vars": {
+    "ALLOWED_ORIGINS": "https://prismelo.tech,https://www.prismelo.tech,http://localhost:3200,http://localhost:3000",
+    "CONTACT_TO_EMAIL": "hello@prismelo.tech",
+    "CONTACT_FROM_EMAIL": "Prismelo <hello@prismelo.tech>",
+    "SMTP_HOST": "smtp-relay.brevo.com",
+    "SMTP_PORT": "465"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "prismelo",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

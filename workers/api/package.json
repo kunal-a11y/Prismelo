@@ -1,0 +1,23 @@
+{
+  "name": "prismelo-api",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Prismelo Technology backend: contact, subscriptions, community and admin API on Cloudflare Workers + D1.",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --port 8787",
+    "deploy": "wrangler deploy",
+    "db:create": "wrangler d1 create prismelo",
+    "db:migrate": "wrangler d1 migrations apply prismelo --remote",
+    "db:migrate:local": "wrangler d1 migrations apply prismelo --local",
+    "db:seed": "node scripts/seed.mjs && wrangler d1 execute prismelo --local --file=seed.sql",
+    "db:seed:remote": "node scripts/seed.mjs && wrangler d1 execute prismelo --remote --file=seed.sql",
+    "smoke": "node test/smoke.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261110.1",
+    "typescript": "^5.7.3",
+    "wrangler": "^4.160.0"
+  }
+}

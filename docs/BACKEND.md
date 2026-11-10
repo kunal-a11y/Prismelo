@@ -4,6 +4,13 @@ The site is a Node.js server (Next.js App Router). Nothing here runs on the
 client, and no environment variable is prefixed `NEXT_PUBLIC_` — every secret
 stays in the server process.
 
+There is also a second, standalone backend in [`workers/api/`](../workers/api/README.md):
+the same routes re-implemented as a Cloudflare Worker with D1 storage, for running
+the API without a Node host. Both are documented here because both exist in the
+repository; the site currently talks to the Next version. Its README covers
+deployment, secrets, the session-cookie caveat on `workers.dev`, and the mapping
+from files to tables.
+
 ## Server routes
 
 | Route | Method | Purpose |
