@@ -18,6 +18,21 @@
       "@/*": ["./*"]
     }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  // TypeScript cannot exclude its way out of a problem, so this lists the
+  // sources that belong to the Next app instead of globbing the whole repo and
+  // subtracting `workers`. The Worker package (`workers/api`) is compiled by its
+  // own tsconfig with Cloudflare's types, and pulling it in here fails the build
+  // on `BufferSource` overloads that exist only in Next's DOM lib.
+  "include": [
+    "next-env.d.ts",
+    "next.config.ts",
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "components/**/*.ts",
+    "components/**/*.tsx",
+    "lib/**/*.ts",
+    "lib/**/*.tsx",
+    ".next/types/**/*.ts"
+  ],
   "exclude": ["node_modules", "workers"]
 }
