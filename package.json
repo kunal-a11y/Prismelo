@@ -5,6 +5,7 @@
   "description": "Prismelo.tech corporate website — technology, security and software engineering.",
   "scripts": {
     "dev": "next dev",
+    "prebuild": "node -e \"console.log('Prismelo build commit:', process.env.CF_PAGES_COMMIT_SHA || 'local')\"",
     "build": "next build",
     "start": "next start",
     "lint": "tsc --noEmit",
