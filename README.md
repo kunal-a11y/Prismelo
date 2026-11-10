@@ -27,6 +27,18 @@ npm start       # serve the production build
 npm run lint    # TypeScript check (tsc --noEmit)
 ```
 
+## Frontend and backend
+
+The project is one Next.js app. Two short guides explain each half:
+
+| Guide | What it covers |
+| --- | --- |
+| [`docs/FRONTEND.md`](docs/FRONTEND.md) | Routes, component map, design tokens, animations, how to add a page, performance rules |
+| [`docs/BACKEND.md`](docs/BACKEND.md) | Server routes, file storage, admin and community auth, the email pipeline, environment variables, security posture |
+
+Quick version: `app/` and `components/` are the frontend, `app/api/` plus `lib/`
+are the backend, and `content/` holds everything written in Markdown.
+
 ## Routes
 
 | Route | Purpose |
@@ -280,11 +292,27 @@ the `/admin` API routes run on the Node.js runtime. Set the delivery environment
 variables in the deployment environment if email is to be sent, and
 `ADMIN_PASSWORD` if the admin area is to accept sign-ins.
 
+### Environment
+
+The live values for this deployment are committed in `.env`, which is why the
+repository is **private**. Next.js loads `.env` in every environment, so a
+fresh clone runs with working mail delivery after `npm install` — no dashboard
+setup and no copy-pasting keys on the server.
+
+Two things follow from that:
+
+- If the repository is ever made public, or a collaborator is added, rotate every
+  key in `.env` first (Brevo SMTP key, `ADMIN_PASSWORD`) — anything committed
+  stays in git history.
+- `.env.local` and `.env.production` stay gitignored and win over `.env` when
+  present, so a machine can override the shared values without touching them.
+
+`.env.example` documents every variable with placeholders only.
+
 ### Setting the environment with one command
 
-Secrets never live in this repository. `.env.example` documents every variable
-with placeholder values; the real values are written on the machine that runs
-the site:
+On a machine where you would rather not use the committed file, the script
+writes `/.env.production` from prompts:
 
 ```bash
 npm run setup:env              # writes .env.production, used by npm start

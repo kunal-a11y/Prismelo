@@ -24,7 +24,9 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # env files
-.env
+# .env is committed on purpose: this repository is private and the deployment
+# reads it directly, so a clone works without configuring the host. If the repo
+# is ever made public or shared, rotate every key in it first.
 .env*.local
 .env.development
 .env.production
