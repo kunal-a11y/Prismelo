@@ -294,6 +294,29 @@ the `/admin` API routes run on the Node.js runtime. Set the delivery environment
 variables in the deployment environment if email is to be sent, and
 `ADMIN_PASSWORD` if the admin area is to accept sign-ins.
 
+### Hosting: what this app needs
+
+It needs a **Node.js host**: Vercel, Railway, Render, Fly, or any server that can
+run `npm run build && npm start`. Three reasons it cannot be dropped on a
+static-only host:
+
+- `lib/resources.ts` and `lib/community-store.ts` read and write files with
+  `node:fs`.
+- `lib/community-auth.ts` hashes with `node:crypto`'s `scrypt`.
+- `lib/mailer.ts` sends SMTP through `nodemailer`, which needs `net`.
+
+**Cloudflare Pages does not work for this app.** Its Next.js adapter
+(`@cloudflare/next-on-pages`) only supports the Edge runtime, where the only
+usable Node built-ins are `buffer`, `events`, `assert`, `util` and `async_hooks`
+— no `fs`, no `net`, no `scrypt`. Deployments there build fine and then fail at
+runtime.
+
+The Cloudflare route that does work is **Workers + `@opennextjs/cloudflare`**,
+which supports Next's Node runtime — but Workers still have no persistent disk,
+so the file-backed content has to move to D1 first. That is what
+[`workers/api`](workers/api/README.md) provides; until the app reads through it,
+host it on a Node server.
+
 ### Environment
 
 The live values for this deployment are committed in `.env`, which is why the
