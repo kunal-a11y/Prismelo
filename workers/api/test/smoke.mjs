@@ -54,6 +54,10 @@ async function main() {
   const health = await call("/health");
   check("GET /health returns 200 and storage ok", health.status === 200 && health.data.storage === "ok", JSON.stringify(health.data));
 
+  // Mail paths answer differently depending on whether SMTP is configured, and
+  // both answers are correct. Assert the one that applies rather than assuming.
+  const mailConfigured = health.data.mail === "configured";
+
   const index = await call("/");
   check("GET / identifies the service", index.status === 200 && index.data.service === "prismelo-api", JSON.stringify(index.data));
 
@@ -110,11 +114,15 @@ async function main() {
       details: "This is a smoke-test enquiry long enough to pass validation.",
     },
   });
-  check(
-    "contact without SMTP credentials reports 501 (no fake success)",
-    valid.status === 501 && valid.data.error === "delivery_not_configured",
-    `${valid.status} ${JSON.stringify(valid.data)}`,
-  );
+  if (mailConfigured) {
+    check("contact sends when SMTP is configured", valid.status === 200 && valid.data.ok === true, `${valid.status} ${JSON.stringify(valid.data)}`);
+  } else {
+    check(
+      "contact without SMTP credentials reports 501 (no fake success)",
+      valid.status === 501 && valid.data.error === "delivery_not_configured",
+      `${valid.status} ${JSON.stringify(valid.data)}`,
+    );
+  }
 
   /* ------------------------------------------------------------- community */
   const register = await call("/api/community/register", {
@@ -208,12 +216,20 @@ async function main() {
   const removedPost = await call(`/api/admin/resources/smoke-post-${stamp}`, { method: "DELETE", token: adminToken });
   check("admin can delete a post", removedPost.status === 200, `${removedPost.status}`);
 
-  const legal = await call("/api/admin/notify-legal", {
-    method: "POST",
-    body: { subject: "Policy update", message: "A sufficiently long legal notice body." },
-    token: adminToken,
-  });
-  check("legal notice without SMTP reports 501", legal.status === 501, `${legal.status}`);
+  // With mail configured this would post a real notice to every subscriber, so
+  // assert the guard instead: an empty notice must be refused before sending.
+  const legal = mailConfigured
+    ? await call("/api/admin/notify-legal", { method: "POST", body: {}, token: adminToken })
+    : await call("/api/admin/notify-legal", {
+        method: "POST",
+        body: { subject: "Policy update", message: "A sufficiently long legal notice body." },
+        token: adminToken,
+      });
+  check(
+    mailConfigured ? "legal notice validates before sending" : "legal notice without SMTP reports 501",
+    mailConfigured ? legal.status === 400 : legal.status === 501,
+    `${legal.status} ${JSON.stringify(legal.data)}`,
+  );
 
   /* ------------------------------------------------------------ subscribe */
   const sub = await call("/api/subscribe", { method: "POST", body: { email: `list-${stamp}@example.com`, source: "resources" } });

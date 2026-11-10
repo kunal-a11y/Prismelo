@@ -15,7 +15,7 @@
     {
       "binding": "DB",
       "database_name": "prismelo",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "ce6e3287-7c77-4372-b1cd-1eef982363e0",
       "migrations_dir": "migrations"
     }
   ]
