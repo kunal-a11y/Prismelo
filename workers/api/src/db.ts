@@ -167,7 +167,7 @@ export async function ensureMemberSubscriptions(env: Env): Promise<void> {
     inserts.push(
       env.DB.prepare(
         "INSERT OR IGNORE INTO subscribers (id, email, email_index, source, token, created_at, unsubscribed_at) VALUES (?, ?, ?, 'community', ?, ?, NULL)",
-      ).bind(newId("sub"), storedEmail, index, newToken(), user.createdAt, null),
+      ).bind(newId("sub"), storedEmail, index, newToken(), user.createdAt),
     );
   }
 
