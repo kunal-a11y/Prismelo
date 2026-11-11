@@ -6,12 +6,9 @@
  * Passwords are PBKDF2-SHA256 (210k iterations) with a random salt. The Next
  * version used scrypt, which does not exist outside Node; existing scrypt
  * hashes therefore cannot be verified here and would need a password reset.
- * The data file held no accounts when this was written, so nothing is lost.
  *
- * Sessions are signed tokens, not database rows: `base64url(payload).base64url(hmac)`
- * with the same payload shape the Next app uses, so a token minted on either
- * side verifies on the other when the secret matches. Nothing in the payload is
- * trusted until the signature matches.
+ * Sessions are signed tokens, not database rows:
+ * `base64url(payload).base64url(hmac)`.
  */
 
 import type { Env } from "./http";
@@ -21,17 +18,16 @@ const decoder = new TextDecoder();
 
 export const ADMIN_COOKIE = "prismelo_admin";
 export const COMMUNITY_COOKIE = "prismelo_community";
-export const ADMIN_MAX_AGE = 60 * 60 * 8; // 8 hours
-export const COMMUNITY_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
+export const ADMIN_MAX_AGE = 60 * 60 * 8;
+export const COMMUNITY_MAX_AGE = 60 * 60 * 24 * 30;
 
 const PBKDF2_ITERATIONS = 210_000;
 const KEY_BYTES = 32;
 
 /**
- * Convert Uint8Array into a standalone ArrayBuffer.
- *
- * This avoids TypeScript's ArrayBufferLike / SharedArrayBuffer
- * compatibility issue with WebCrypto's BufferSource types.
+ * Always create a standalone ArrayBuffer.
+ * This avoids the ArrayBufferLike / SharedArrayBuffer TypeScript
+ * incompatibility with WebCrypto BufferSource parameters.
  */
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   const buffer = new ArrayBuffer(bytes.byteLength);
@@ -41,6 +37,7 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
 
 export function b64urlFromBytes(bytes: Uint8Array): string {
   let binary = "";
+
   for (const byte of bytes) {
     binary += String.fromCharCode(byte);
   }
@@ -88,11 +85,6 @@ function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
 
 /* ------------------------------------------------------------------ passwords */
 
-/**
- * A server-side pepper: HMAC-SHA256(pepper, password) before key stretching.
- * Salts stop one rainbow table from covering every account; the pepper stops a
- * stolen database from being crackable at all, because the key is not in it.
- */
 async function prehash(
   password: string,
   pepper: string,
@@ -104,10 +96,7 @@ async function prehash(
   const key = await crypto.subtle.importKey(
     "raw",
     encoder.encode(pepper),
-    {
-      name: "HMAC",
-      hash: "SHA-256",
-    },
+    { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"],
   );
@@ -153,12 +142,14 @@ export async function hashPassword(
   pepper = "",
 ): Promise<string> {
   const salt = crypto.getRandomValues(new Uint8Array(16));
-
   const secret = await prehash(password, pepper);
-  const hash = await derive(secret, salt, PBKDF2_ITERATIONS);
 
-  // `pbkdf2h` means peppered, so a hash can never be verified under the wrong
-  // scheme by accident.
+  const hash = await derive(
+    secret,
+    salt,
+    PBKDF2_ITERATIONS,
+  );
+
   const scheme = pepper ? "pbkdf2h" : "pbkdf2";
 
   return `${scheme}:${PBKDF2_ITERATIONS}:${b64urlFromBytes(salt)}:${b64urlFromBytes(hash)}`;
@@ -179,8 +170,6 @@ export async function verifyPassword(
     return false;
   }
 
-  // A peppered hash cannot be checked without the pepper, and an unpeppered
-  // one must not silently pass in a peppered deployment.
   if (scheme === "pbkdf2h" && !pepper) {
     return false;
   }
@@ -208,14 +197,8 @@ export async function verifyPassword(
   );
 }
 
-/**
- * Character-by-character comparison that always looks at every character.
- *
- * `a === b` stops at the first difference, so its running time hints at how
- * much of the input was right. This walks the longer string to the end and
- * folds in the length, so "", "a", "aa" and a fully wrong password all cost
- * the same and the result is a single boolean at the very end.
- */
+/* ------------------------------------------------------------------ comparison */
+
 export function slowEquals(a: string, b: string): boolean {
   const length = Math.max(a.length, b.length);
   let diff = a.length ^ b.length;
@@ -243,10 +226,7 @@ function hmacKey(secret: string): Promise<CryptoKey> {
   const key = crypto.subtle.importKey(
     "raw",
     encoder.encode(secret),
-    {
-      name: "HMAC",
-      hash: "SHA-256",
-    },
+    { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"],
   );
@@ -413,7 +393,7 @@ export function readCookie(
   return null;
 }
 
-/** Bearer token first (works from any origin), then the cookie (same-site). */
+/** Bearer token first, then the cookie. */
 export function requestToken(
   request: Request,
   cookieName: string,
@@ -446,9 +426,6 @@ export function sessionCookie(
     `Max-Age=${maxAge}`,
   ];
 
-  // Only set when the API and the site share a registrable domain
-  // (api.prismelo.tech + prismelo.tech). On workers.dev this stays empty,
-  // and the frontend uses the Bearer token instead.
   if (env.COOKIE_DOMAIN) {
     parts.push(`Domain=${env.COOKIE_DOMAIN}`);
   }
