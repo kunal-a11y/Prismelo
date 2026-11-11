@@ -21,7 +21,9 @@ export const COMMUNITY_COOKIE = "prismelo_community";
 export const ADMIN_MAX_AGE = 60 * 60 * 8;
 export const COMMUNITY_MAX_AGE = 60 * 60 * 24 * 30;
 
-const PBKDF2_ITERATIONS = 210_000;
+// Cloudflare Workers' WebCrypto PBKDF2 implementation rejects iterations
+// above 100,000. Keep the generated hash at the runtime's supported ceiling.
+const PBKDF2_ITERATIONS = 100_000;
 const KEY_BYTES = 32;
 
 /**
@@ -176,7 +178,7 @@ export async function verifyPassword(
 
   const rounds = Number(iterations);
 
-  if (!Number.isInteger(rounds) || rounds < 10_000) {
+  if (!Number.isInteger(rounds) || rounds < 10_000 || rounds > PBKDF2_ITERATIONS) {
     return false;
   }
 
