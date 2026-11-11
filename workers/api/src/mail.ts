@@ -15,6 +15,7 @@ import type { Env } from "./http";
 
 export type MailMessage = {
   to: string;
+  bcc?: string[];
   subject: string;
   html: string;
   text: string;
@@ -239,7 +240,8 @@ export async function sendMail(env: Env, message: MailMessage): Promise<MailResu
   if (apiKey) {
     const from = sender(env);
     const recipients = addresses(message.to);
-    if (recipients.length === 0) return { ok: false, reason: "failed", error: "no recipients" };
+    const bcc = addresses((message.bcc ?? []).join(","));
+    if (recipients.length === 0 && bcc.length === 0) return { ok: false, reason: "failed", error: "no recipients" };
     try {
       const response = await fetch("https://api.brevo.com/v3/smtp/email", {
         method: "POST",
@@ -247,6 +249,7 @@ export async function sendMail(env: Env, message: MailMessage): Promise<MailResu
         body: JSON.stringify({
           sender: from,
           to: recipients,
+          ...(bcc.length > 0 ? { bcc } : {}),
           subject: message.subject,
           htmlContent: message.html,
           textContent: message.text,
@@ -258,7 +261,7 @@ export async function sendMail(env: Env, message: MailMessage): Promise<MailResu
         const detail = (await response.text()).slice(0, 300);
         return { ok: false, reason: "failed", error: `Brevo API ${response.status}: ${detail}` };
       }
-      return { ok: true, accepted: recipients.map((entry) => entry.email) };
+      return { ok: true, accepted: [...recipients, ...bcc].map((entry) => entry.email) };
     } catch (error) {
       return { ok: false, reason: "failed", error: error instanceof Error ? error.message : "Brevo API request failed" };
     }
@@ -269,7 +272,8 @@ export async function sendMail(env: Env, message: MailMessage): Promise<MailResu
 
   const from = sender(env);
   const to = addresses(message.to);
-  if (to.length === 0) return { ok: false, reason: "failed", error: "no recipients" };
+  const bcc = addresses((message.bcc ?? []).join(","));
+  if (to.length === 0 && bcc.length === 0) return { ok: false, reason: "failed", error: "no recipients" };
 
   const secure = config.port === 465;
   let socket: Socket | undefined;
@@ -305,7 +309,7 @@ export async function sendMail(env: Env, message: MailMessage): Promise<MailResu
     }
 
     await smtp.expect(`MAIL FROM:<${from.email}>`, [250]);
-    for (const entry of to) await smtp.expect(`RCPT TO:<${entry.email}>`, [250, 251]);
+    for (const entry of [...to, ...bcc]) await smtp.expect(`RCPT TO:<${entry.email}>`, [250, 251]);
 
     await smtp.expect("DATA", [354]);
     await smtp.write(`${dotStuff(buildMessage(from, message))}\r\n.\r\n`);
@@ -313,7 +317,7 @@ export async function sendMail(env: Env, message: MailMessage): Promise<MailResu
     if (accepted.code !== 250) throw new Error(`data: ${accepted.code} ${accepted.text.slice(0, 160)}`);
 
     await smtp.close();
-    return { ok: true, accepted: to.map((entry) => entry.email) };
+    return { ok: true, accepted: [...to, ...bcc].map((entry) => entry.email) };
   } catch (error) {
     try {
       socket?.close();

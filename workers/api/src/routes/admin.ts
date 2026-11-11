@@ -19,6 +19,8 @@ import {
   deleteSubscriber,
   deleteThread,
   findThreadById,
+  findReplyById,
+  findUserById,
   countMembers,
   countReplies,
   ensureMemberSubscriptions,
@@ -31,10 +33,12 @@ import {
   recentMail,
   recentReplies,
   recordMail,
+  threadParticipants,
   updateThread,
   upsertPost,
 } from "../db";
-import { mailerConfigured, renderEmail, sendMail } from "../mail";
+import { mailerConfigured, recipient, renderEmail, sendMail } from "../mail";
+import { announcePublishedPost, sendLoggedEmail } from "../notifications";
 
 async function isAdmin(ctx: Ctx): Promise<boolean> {
   const token = requestToken(ctx.request, ADMIN_COOKIE);
@@ -163,6 +167,7 @@ export async function createResource(ctx: Ctx): Promise<Response> {
   };
 
   await upsertPost(ctx.env, post);
+  if (!post.draft) await announcePublishedPost(ctx.env, post);
   return json({ ok: true, post }, { env: ctx.env, request: ctx.request });
 }
 
@@ -207,6 +212,7 @@ export async function updateResource(ctx: Ctx): Promise<Response> {
   };
 
   await upsertPost(ctx.env, post);
+  if (existing.draft && !post.draft) await announcePublishedPost(ctx.env, post);
   return json({ ok: true, post }, { env: ctx.env, request: ctx.request });
 }
 
@@ -264,15 +270,53 @@ export async function removeThread(ctx: Ctx): Promise<Response> {
   if (!(await isAdmin(ctx))) return unauthorised(ctx);
   const thread = await findThreadById(ctx.env, ctx.params.id);
   if (!thread) return json({ error: "not_found" }, { status: 404, env: ctx.env, request: ctx.request });
+  const authors = await Promise.all(
+    (await threadParticipants(ctx.env, thread.id)).map((id) => findUserById(ctx.env, id)),
+  );
+  const emails = [...new Set(authors.map((author) => author?.email.trim().toLowerCase()).filter((email): email is string => Boolean(email)))];
   await deleteThread(ctx.env, thread.id);
+  await notifyModeration(ctx.env, emails, thread.title, "discussion");
   return json({ ok: true }, { env: ctx.env, request: ctx.request });
 }
 
 export async function removeReply(ctx: Ctx): Promise<Response> {
   if (!(await isAdmin(ctx))) return unauthorised(ctx);
+  const reply = await findReplyById(ctx.env, ctx.params.id);
+  if (!reply) return json({ error: "not_found" }, { status: 404, env: ctx.env, request: ctx.request });
+  const [author, thread] = await Promise.all([
+    findUserById(ctx.env, reply.authorId),
+    findThreadById(ctx.env, reply.threadId),
+  ]);
   const removed = await deleteReply(ctx.env, ctx.params.id);
   if (!removed) return json({ error: "not_found" }, { status: 404, env: ctx.env, request: ctx.request });
+  if (author?.email) await notifyModeration(ctx.env, [author.email], thread?.title ?? "a forum discussion", "reply");
   return json({ ok: true }, { env: ctx.env, request: ctx.request });
+}
+
+async function notifyModeration(env: Ctx["env"], emails: string[], discussionTitle: string, item: "discussion" | "reply") {
+  if (emails.length === 0) return;
+  const subject = item === "discussion"
+    ? "A Prismelo forum discussion was removed"
+    : "A reply in the Prismelo forum was removed";
+  const content = renderEmail({
+    kicker: "Community moderation",
+    heading: item === "discussion" ? "Your discussion was removed" : "Your reply was removed",
+    details: [{ label: "Discussion", value: discussionTitle }],
+    quote: "A Prismelo moderator removed this content from the forum. If you think this was a mistake or would like more information, please contact our team.",
+    action: {
+      label: "Contact Prismelo",
+      href: `mailto:${encodeURIComponent(recipient(env))}?subject=${encodeURIComponent("Question about a forum moderation decision")}`,
+    },
+    footer: "This is an automated moderation notice. For questions, reply to this email or contact hello@prismelo.tech.",
+  });
+  await sendLoggedEmail(env, {
+    to: recipient(env),
+    bcc: [...new Set(emails.map((email) => email.trim().toLowerCase()).filter(Boolean))],
+    replyTo: recipient(env),
+    subject,
+    html: content.html,
+    text: content.text,
+  }, { kind: "forum-moderation", recipient: `${emails.length} affected forum members`, subject });
 }
 
 export async function subscribers(ctx: Ctx): Promise<Response> {

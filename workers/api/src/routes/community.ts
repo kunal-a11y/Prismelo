@@ -40,7 +40,8 @@ import {
   usernameTaken,
   type User,
 } from "../db";
-import { mailerConfigured, renderEmail, sendMail } from "../mail";
+import { recipient, renderEmail } from "../mail";
+import { sendLoggedEmail } from "../notifications";
 
 async function currentUser(ctx: Ctx): Promise<User | null> {
   const token = requestToken(ctx.request, COMMUNITY_COOKIE);
@@ -242,6 +243,29 @@ export async function createThreadRoute(ctx: Ctx): Promise<Response> {
   }
 
   const thread = await createThread(ctx.env, { slug, title: title!, category: category!, body: body!, authorId: user.id });
+
+  if (user.email) {
+    const content = renderEmail({
+      kicker: "Forum discussion created",
+      preheader: "Your discussion is now live on Prismelo.",
+      heading: "Your discussion has been created",
+      details: [
+        { label: "Title", value: thread.title },
+        { label: "Category", value: thread.category },
+      ],
+      quote: "Your forum discussion is live. We will email you when someone replies.",
+      action: { label: "View your discussion", href: `https://prismelo.tech/community/t/${thread.slug}` },
+      footer: "If you did not create this discussion, contact hello@prismelo.tech.",
+    });
+    const subject = `Your Prismelo discussion was created: ${thread.title}`;
+    await sendLoggedEmail(ctx.env, {
+      to: user.email,
+      replyTo: recipient(ctx.env),
+      subject,
+      html: content.html,
+      text: content.text,
+    }, { kind: "forum-created", recipient: user.email, subject });
+  }
   return json({ ok: true, slug: thread.slug }, { env: ctx.env, request: ctx.request });
 }
 
@@ -305,47 +329,39 @@ export async function replyRoute(ctx: Ctx): Promise<Response> {
 
   const reply = await createReply(ctx.env, { threadId: found.id, body, authorId: user.id });
 
-  // Notify the thread's participants. A mail failure is logged and ignored:
-  // the reply itself is already saved and must not be reported as failed.
-  if (mailerConfigured(ctx.env)) {
-    try {
-      const participants = await threadParticipants(ctx.env, found.id);
-      const emails: string[] = [];
-      for (const id of participants) {
-        if (id === user.id) continue;
-        const person = await findUserById(ctx.env, id);
-        if (person?.email) emails.push(person.email);
-      }
+  // Notify the thread author and everyone who has replied before. The reply is
+  // already saved, so a mail outage never turns a successful post into an error.
+  try {
+    const participants = await threadParticipants(ctx.env, found.id);
+    const people = await Promise.all(
+      participants.filter((id) => id !== user.id).map((id) => findUserById(ctx.env, id)),
+    );
+    const emails = [...new Set(people.map((person) => person?.email.trim().toLowerCase()).filter((email): email is string => Boolean(email)))];
 
-      if (emails.length > 0) {
-        const content = renderEmail({
-          kicker: "New reply",
-          heading: `New reply in ${found.title}`,
-          details: [
-            { label: "From", value: user.name },
-            { label: "Thread", value: found.title },
-          ],
-          quote: body,
-          action: { label: "Read the thread", href: `https://prismelo.tech/community/${found.slug}` },
-          footer: "You are receiving this because you posted in this thread.",
-        });
-        const delivery = await sendMail(ctx.env, {
-          to: emails.slice(0, 20).join(", "),
-          subject: `New reply in ${found.title}`,
-          html: content.html,
-          text: content.text,
-        });
-        await recordMail(ctx.env, {
-          kind: "reply",
-          status: delivery.ok ? "sent" : delivery.reason === "not_configured" ? "skipped" : "failed",
-          recipient: emails.slice(0, 20).join(", "),
-          subject: `New reply in ${found.title}`,
-          detail: delivery.ok ? "" : delivery.reason === "failed" ? delivery.error ?? "" : "not configured",
-        });
-      }
-    } catch (error) {
-      console.error("reply notification failed", error);
+    if (emails.length > 0) {
+      const content = renderEmail({
+        kicker: "New forum reply",
+        heading: `New reply in ${found.title}`,
+        details: [
+          { label: "From", value: user.name },
+          { label: "Discussion", value: found.title },
+        ],
+        quote: body,
+        action: { label: "Read the discussion", href: `https://prismelo.tech/community/t/${found.slug}` },
+        footer: "You are receiving this because you created or replied to this discussion. Reply to this email or contact hello@prismelo.tech if you need help.",
+      });
+      const subject = `New reply in ${found.title}`;
+      await sendLoggedEmail(ctx.env, {
+        to: recipient(ctx.env),
+        bcc: emails,
+        replyTo: recipient(ctx.env),
+        subject,
+        html: content.html,
+        text: content.text,
+      }, { kind: "forum-reply", recipient: `${emails.length} forum participants`, subject });
     }
+  } catch (error) {
+    console.error("reply notification failed", error);
   }
 
   return json({ ok: true, id: reply.id }, { env: ctx.env, request: ctx.request });

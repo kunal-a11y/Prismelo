@@ -8,7 +8,7 @@ import {
   readJson,
   type Ctx,
 } from "../http";
-import { getPost, hitRateLimit, listPosts, readingTime, recordMail, addSubscriber, unsubscribeByToken } from "../db";
+import { findSubscriberByToken, getPost, hitRateLimit, listPosts, readingTime, recordMail, addSubscriber, unsubscribeByToken } from "../db";
 import { encryptionConfigured } from "../crypto";
 import { mailerConfigured, recipient, renderEmail, sendMail } from "../mail";
 
@@ -138,7 +138,7 @@ export async function contact(ctx: Ctx): Promise<Response> {
     preheader: "Your enquiry has reached the Prismelo team.",
     heading: `Thanks for getting in touch, ${firstName}`,
     details: [{ label: "Your enquiry", value: details! }],
-    quote: "Our team will review your message and get back to you as soon as possible.",
+    quote: "Your contact form has been submitted successfully. Our team will respond to you within 24 hours.",
     footer: "This is an automatic confirmation of the message you submitted at prismelo.tech. If you did not send it, you can ignore this email.",
   });
   const receipt = await sendMail(ctx.env, {
@@ -236,6 +236,19 @@ export async function unsubscribe(ctx: Ctx): Promise<Response> {
   }
 
   return json({ ok: true }, { env: ctx.env, request: ctx.request });
+}
+
+export async function subscriptionStatus(ctx: Ctx): Promise<Response> {
+  const token = ctx.url.searchParams.get("token")?.trim() ?? "";
+  if (!/^[a-f0-9]{32}$/.test(token)) {
+    return json({ error: "not_found" }, { status: 404, env: ctx.env, request: ctx.request });
+  }
+  const subscriber = await findSubscriberByToken(ctx.env, token);
+  if (!subscriber) return json({ error: "not_found" }, { status: 404, env: ctx.env, request: ctx.request });
+  return json(
+    { subscriber: { email: subscriber.email, token: subscriber.token, unsubscribedAt: subscriber.unsubscribedAt } },
+    { env: ctx.env, request: ctx.request },
+  );
 }
 
 /* ----------------------------------------------------------------- resources */

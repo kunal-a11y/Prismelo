@@ -380,6 +380,11 @@ function toReply(row: ReplyRow): Reply {
   };
 }
 
+export async function findReplyById(env: Env, id: string): Promise<Reply | null> {
+  const row = await env.DB.prepare("SELECT * FROM replies WHERE id = ?").bind(id).first<ReplyRow>();
+  return row ? toReply(row) : null;
+}
+
 export async function repliesForThread(env: Env, threadId: string) {
   const { results } = await env.DB.prepare("SELECT * FROM replies WHERE thread_id = ? ORDER BY created_at ASC")
     .bind(threadId)
@@ -474,6 +479,11 @@ async function toSubscriber(env: Env, row: SubscriberRow): Promise<Subscriber | 
     createdAt: row.created_at,
     unsubscribedAt: row.unsubscribed_at,
   };
+}
+
+export async function findSubscriberByToken(env: Env, token: string): Promise<Subscriber | null> {
+  const row = await env.DB.prepare("SELECT * FROM subscribers WHERE token = ?").bind(token).first<SubscriberRow>();
+  return row ? toSubscriber(env, row) : null;
 }
 
 /** Idempotent: subscribing twice keeps the original row and returns it. */

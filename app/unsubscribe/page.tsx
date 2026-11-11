@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Container, Eyebrow } from "@/components/section";
 import { UnsubscribeForm } from "@/components/community/unsubscribe-form";
 import { readStore } from "@/lib/community-store";
+import { communityJson } from "@/lib/community-cloudflare";
 
 export const metadata: Metadata = {
   title: "Unsubscribe",
@@ -17,9 +18,14 @@ export default async function UnsubscribePage({
   searchParams: Promise<{ token?: string }>;
 }) {
   const { token } = await searchParams;
-  const subscriber = token
+  const remote = token
+    ? await communityJson<{ subscriber: { email: string; token: string; unsubscribedAt: string | null } }>(
+        `/api/subscribe/status?token=${encodeURIComponent(token)}`,
+      )
+    : null;
+  const subscriber = remote?.subscriber ?? (token
     ? readStore().subscribers.find((entry) => entry.token === token)
-    : undefined;
+    : undefined);
 
   return (
     <Container className="flex min-h-[80vh] items-center justify-center pt-28 pb-16 md:pt-32 md:pb-20">

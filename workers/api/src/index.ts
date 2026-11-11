@@ -11,7 +11,7 @@
  */
 
 import { json, preflight, type Ctx, type Env } from "./http";
-import { contact, health, resource, resources, subscribe, unsubscribe } from "./routes/public";
+import { contact, health, resource, resources, subscribe, subscriptionStatus, unsubscribe } from "./routes/public";
 import {
   createThreadRoute,
   login as communityLogin,
@@ -63,6 +63,7 @@ on("GET", "/api/health", health);
 
 on("POST", "/api/contact", contact);
 on("POST", "/api/subscribe", subscribe);
+on("GET", "/api/subscribe/status", subscriptionStatus);
 on("POST", "/api/subscribe/unsubscribe", unsubscribe);
 
 on("GET", "/api/resources", resources);
