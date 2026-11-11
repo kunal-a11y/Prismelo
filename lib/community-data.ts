@@ -210,6 +210,15 @@ export async function totalThreadCount() {
   return data ? data.threads.length : totalThreadCountFromStore();
 }
 
+export async function discussionCounts() {
+  const discussions = await listDiscussions();
+  const byCategory: Record<string, number> = {};
+  for (const discussion of discussions) {
+    byCategory[discussion.category] = (byCategory[discussion.category] ?? 0) + 1;
+  }
+  return { total: discussions.length, byCategory };
+}
+
 export async function getUser(username: string): Promise<CommunityProfile | null> {
   const data = await communityJson<{ user: NonNullable<ApiAuthor> }>(`/api/community/users/${encodeURIComponent(username)}`);
   return data ? apiProfile(data.user) : getUserFromStore(username);

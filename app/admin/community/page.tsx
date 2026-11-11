@@ -9,6 +9,7 @@ import {
 } from "@/components/admin/community-actions";
 import { isAdmin } from "@/lib/admin-auth";
 import { emailConfigured, readMailLog } from "@/lib/email";
+import { communityApi } from "@/lib/community-cloudflare";
 import { formatCommunityDate, formatCommunityDateTime } from "@/lib/community";
 import { readStore } from "@/lib/community-store";
 
@@ -20,24 +21,48 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function AdminCommunityPage() {
-  if (!(await isAdmin())) redirect("/admin/login");
+  const response = await communityApi("/api/admin/community/overview", true);
+  if (response && response.status === 401) redirect("/admin/login");
+  if (!response && !(await isAdmin())) redirect("/admin/login");
 
-  const store = readStore();
-  const log = readMailLog();
-
-  const authorOf = (id: string) =>
-    store.users.find((user) => user.id === id) ?? null;
-
-  const replyCounts = new Map<string, number>();
-  for (const reply of store.replies) {
-    replyCounts.set(reply.threadId, (replyCounts.get(reply.threadId) ?? 0) + 1);
-  }
-
-  const threads = [...store.threads].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  const recentReplies = [...store.replies]
+  type ApiUser = { id: string; username: string; name: string } | null;
+  type ApiThread = {
+    id: string; slug: string; title: string; category: string; authorId: string;
+    createdAt: string; locked: boolean; pinned: boolean; replyCount: number; author: ApiUser;
+  };
+  type ApiReply = {
+    id: string; body: string; createdAt: string; author: ApiUser;
+    thread: { slug: string; title: string } | null;
+  };
+  type ApiSubscriber = {
+    id: string; email: string; source: string; createdAt: string; unsubscribedAt: string | null;
+  };
+  type ApiMail = {
+    id: string; kind: string; status: "sent" | "failed" | "skipped"; recipient: string;
+    subject: string; detail: string; created_at: string;
+  };
+  const overview = response?.ok
+    ? (await response.json()) as {
+        threads: ApiThread[]; replies: ApiReply[]; replyTotal: number; memberCount: number;
+        subscribers: ApiSubscriber[]; mail: ApiMail[];
+      }
+    : null;
+  const store = overview ? null : readStore();
+  const log = overview
+    ? overview.mail.map((entry) => ({
+        id: entry.id, kind: entry.kind, status: entry.status, to: entry.recipient,
+        subject: entry.subject, at: entry.created_at, error: entry.detail || undefined,
+      }))
+    : readMailLog();
+  const localAuthorOf = (id: string) => store?.users.find((user) => user.id === id) ?? null;
+  const threads = overview?.threads ?? [...(store?.threads ?? [])].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const recentReplies = overview?.replies ?? [...(store?.replies ?? [])]
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, 20);
-  const activeSubscribers = store.subscribers.filter((entry) => !entry.unsubscribedAt);
+  const replyTotal = overview?.replyTotal ?? store?.replies.length ?? 0;
+  const memberCount = overview?.memberCount ?? store?.users.length ?? 0;
+  const activeSubscribers = (overview?.subscribers ?? store?.subscribers ?? [])
+    .filter((entry) => !entry.unsubscribedAt);
   const sent = log.filter((entry) => entry.status === "sent").length;
   const skipped = log.filter((entry) => entry.status === "skipped").length;
   const failed = log.filter((entry) => entry.status === "failed").length;
@@ -57,8 +82,8 @@ export default async function AdminCommunityPage() {
         <div className="flex flex-wrap items-center gap-6">
           {[
             ["THREADS", threads.length],
-            ["REPLIES", store.replies.length],
-            ["MEMBERS", store.users.length],
+            ["REPLIES", replyTotal],
+            ["MEMBERS", memberCount],
             ["SUBSCRIBERS", activeSubscribers.length],
           ].map(([label, value]) => (
             <div key={String(label)}>
@@ -116,8 +141,10 @@ export default async function AdminCommunityPage() {
         ) : (
           <ul className="border-t border-line">
             {threads.map((thread) => {
-              const author = authorOf(thread.authorId);
-              const replies = replyCounts.get(thread.id) ?? 0;
+              const author = "author" in thread ? thread.author : localAuthorOf(thread.authorId);
+              const replies = "replyCount" in thread
+                ? thread.replyCount
+                : store?.replies.filter((reply) => reply.threadId === thread.id).length ?? 0;
               return (
                 <li
                   key={thread.id}
@@ -183,8 +210,10 @@ export default async function AdminCommunityPage() {
         ) : (
           <ul className="border-t border-line">
             {recentReplies.map((reply) => {
-              const author = authorOf(reply.authorId);
-              const thread = store.threads.find((entry) => entry.id === reply.threadId);
+              const author = "author" in reply ? reply.author : localAuthorOf(reply.authorId);
+              const thread = "thread" in reply
+                ? reply.thread
+                : store?.threads.find((entry) => entry.id === reply.threadId) ?? null;
               return (
                 <li key={reply.id} className="border-b border-line py-4">
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1">

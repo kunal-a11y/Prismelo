@@ -9,6 +9,7 @@ import { emailConfigured, readMailLog } from "@/lib/email";
 import { legalStatus } from "@/lib/legal";
 import { readStore } from "@/lib/community-store";
 import { formatCommunityDateTime } from "@/lib/community";
+import { communityApi } from "@/lib/community-cloudflare";
 
 export const metadata: Metadata = {
   title: "Policy notices",
@@ -18,11 +19,25 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function AdminNotificationsPage() {
-  if (!(await isAdmin())) redirect("/admin/login");
-
   const statuses = legalStatus();
-  const subscribers = readStore().subscribers.filter((entry) => !entry.unsubscribedAt);
-  const log = readMailLog();
+  const response = await communityApi("/api/admin/community/overview", true);
+  if (response?.status === 401) redirect("/admin/login");
+  if (!response && !(await isAdmin())) redirect("/admin/login");
+  const overview = response?.ok
+    ? (await response.json()) as {
+        subscribers: Array<{ unsubscribedAt: string | null }>;
+        mail: Array<{ id: string; kind: string; status: "sent" | "failed" | "skipped"; recipient: string; subject: string; created_at: string }>;
+      }
+    : null;
+  const subscribers = overview
+    ? overview.subscribers.filter((entry) => !entry.unsubscribedAt)
+    : readStore().subscribers.filter((entry) => !entry.unsubscribedAt);
+  const log = overview
+    ? overview.mail.map((entry) => ({
+        id: entry.id, kind: entry.kind, status: entry.status, to: entry.recipient,
+        subject: entry.subject, at: entry.created_at,
+      }))
+    : readMailLog();
   const configured = emailConfigured();
 
   return (

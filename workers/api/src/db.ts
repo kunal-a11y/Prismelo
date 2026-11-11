@@ -140,6 +140,45 @@ export async function usernameTaken(env: Env, username: string): Promise<boolean
   return Boolean(row);
 }
 
+export async function countMembers(env: Env): Promise<number> {
+  const row = await env.DB.prepare("SELECT COUNT(*) AS total FROM users").first<{ total: number }>();
+  return Number(row?.total ?? 0);
+}
+
+/**
+ * Bring accounts created before forum signups were connected to the email list
+ * into the subscriber table once. Existing unsubscribe choices are preserved.
+ */
+export async function ensureMemberSubscriptions(env: Env): Promise<void> {
+  const synced = await env.DB.prepare("SELECT 1 AS done FROM app_settings WHERE key = ?")
+    .bind("member_subscribers_backfilled")
+    .first();
+  if (synced) return;
+
+  const { results } = await env.DB.prepare("SELECT * FROM users ORDER BY created_at ASC").all<UserRow>();
+  const inserts: D1PreparedStatement[] = [];
+  for (const row of results ?? []) {
+    const user = await toUser(env, row);
+    if (!user) continue;
+    const [storedEmail, index] = await Promise.all([
+      encryptField(env, user.email),
+      blindIndex(env, user.email),
+    ]);
+    inserts.push(
+      env.DB.prepare(
+        "INSERT OR IGNORE INTO subscribers (id, email, email_index, source, token, created_at, unsubscribed_at) VALUES (?, ?, ?, 'community', ?, ?, NULL)",
+      ).bind(newId("sub"), storedEmail, index, newToken(), user.createdAt, null),
+    );
+  }
+
+  for (let offset = 0; offset < inserts.length; offset += 90) {
+    await env.DB.batch(inserts.slice(offset, offset + 90));
+  }
+  await env.DB.prepare("INSERT OR IGNORE INTO app_settings (key, value) VALUES (?, ?)")
+    .bind("member_subscribers_backfilled", nowIso())
+    .run();
+}
+
 export async function createUser(
   env: Env,
   input: { username: string; name: string; email: string; passwordHash: string },
@@ -159,11 +198,31 @@ export async function createUser(
     blindIndex(env, user.email),
   ]);
 
-  await env.DB.prepare(
+  const existingSubscriber = await env.DB.prepare(
+    "SELECT id FROM subscribers WHERE email_index = ? OR email = ?",
+  )
+    .bind(index, user.email)
+    .first<{ id: string }>();
+
+  const statements = [env.DB.prepare(
     "INSERT INTO users (id, username, name, email, email_index, password_hash, bio, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
   )
-    .bind(user.id, user.username, user.name, storedEmail, index, user.passwordHash, user.bio, user.createdAt)
-    .run();
+    .bind(user.id, user.username, user.name, storedEmail, index, user.passwordHash, user.bio, user.createdAt)];
+
+  if (existingSubscriber) {
+    // Completing forum registration is explicit consent under the signup copy.
+    statements.push(
+      env.DB.prepare("UPDATE subscribers SET unsubscribed_at = NULL WHERE id = ?")
+        .bind(existingSubscriber.id),
+    );
+  } else {
+    statements.push(
+      env.DB.prepare(
+        "INSERT OR IGNORE INTO subscribers (id, email, email_index, source, token, created_at, unsubscribed_at) VALUES (?, ?, ?, 'community', ?, ?, NULL)",
+      ).bind(newId("sub"), await encryptField(env, user.email), index, newToken(), user.createdAt),
+    );
+  }
+  await env.DB.batch(statements);
 
   return user;
 }
@@ -333,6 +392,28 @@ export async function repliesForThread(env: Env, threadId: string) {
   );
 
   return rows.map((row) => ({ ...toReply(row), author: authors.get(row.author_id) ?? null }));
+}
+
+export async function recentReplies(env: Env, limit = 20) {
+  const { results } = await env.DB.prepare(
+    `SELECT r.*, t.slug AS thread_slug, t.title AS thread_title
+     FROM replies r LEFT JOIN threads t ON t.id = r.thread_id
+     ORDER BY r.created_at DESC LIMIT ?`,
+  )
+    .bind(limit)
+    .all<ReplyRow & { thread_slug: string | null; thread_title: string | null }>();
+  const rows = results ?? [];
+  const authors = await userNames(env, rows.map((row) => row.author_id));
+  return rows.map((row) => ({
+    ...toReply(row),
+    author: authors.get(row.author_id) ?? null,
+    thread: row.thread_slug && row.thread_title ? { slug: row.thread_slug, title: row.thread_title } : null,
+  }));
+}
+
+export async function countReplies(env: Env): Promise<number> {
+  const row = await env.DB.prepare("SELECT COUNT(*) AS total FROM replies").first<{ total: number }>();
+  return Number(row?.total ?? 0);
 }
 
 /** Author ids of everyone in a thread, so a reply can notify them. */

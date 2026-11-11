@@ -19,6 +19,9 @@ import {
   deleteSubscriber,
   deleteThread,
   findThreadById,
+  countMembers,
+  countReplies,
+  ensureMemberSubscriptions,
   getPost,
   hitRateLimit,
   listPosts,
@@ -26,6 +29,7 @@ import {
   listThreads,
   nowIso,
   recentMail,
+  recentReplies,
   recordMail,
   updateThread,
   upsertPost,
@@ -218,6 +222,23 @@ export async function deleteResource(ctx: Ctx): Promise<Response> {
 export async function communityThreads(ctx: Ctx): Promise<Response> {
   if (!(await isAdmin(ctx))) return unauthorised(ctx);
   return json({ threads: await listThreads(ctx.env) }, { env: ctx.env, request: ctx.request });
+}
+
+export async function communityOverview(ctx: Ctx): Promise<Response> {
+  if (!(await isAdmin(ctx))) return unauthorised(ctx);
+  await ensureMemberSubscriptions(ctx.env);
+  const [threads, replies, replyTotal, memberCount, subscribers, mail] = await Promise.all([
+    listThreads(ctx.env),
+    recentReplies(ctx.env, 20),
+    countReplies(ctx.env),
+    countMembers(ctx.env),
+    listSubscribers(ctx.env),
+    recentMail(ctx.env),
+  ]);
+  return json(
+    { threads, replies, replyTotal, memberCount, subscribers, mail },
+    { env: ctx.env, request: ctx.request },
+  );
 }
 
 export async function moderateThread(ctx: Ctx): Promise<Response> {

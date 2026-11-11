@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { categoryCount, totalThreadCount } from "@/lib/community-data";
+import { discussionCounts } from "@/lib/community-data";
 import { communityCategories } from "@/lib/community";
 import { accentHex, toneForSlug } from "@/lib/accents";
 import { cn } from "@/lib/utils";
@@ -41,13 +41,14 @@ export function CommunityAvatar({
   );
 }
 
-export function CategoryNav({
+export async function CategoryNav({
   active,
   className,
 }: {
   active?: string;
   className?: string;
 }) {
+  const counts = await discussionCounts();
   return (
     <nav aria-label="Categories" className={className}>
       <p className="t-label mb-4 text-faint">Categories</p>
@@ -62,7 +63,7 @@ export function CategoryNav({
           >
             All discussions
             <span className="t-mono text-faint">
-              {String(totalThreadCount()).padStart(2, "0")}
+              {String(counts.total).padStart(2, "0")}
             </span>
           </Link>
         </li>
@@ -87,7 +88,7 @@ export function CategoryNav({
                 {category.name}
               </span>
               <span className="t-mono text-faint">
-                {String(categoryCount(category.slug)).padStart(2, "0")}
+                {String(counts.byCategory[category.slug] ?? 0).padStart(2, "0")}
               </span>
             </Link>
           </li>

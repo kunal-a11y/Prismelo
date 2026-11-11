@@ -26,6 +26,7 @@ import {
 import {
   auditLog,
   communityThreads,
+  communityOverview,
   createResource,
   deleteResource,
   login as adminLogin,
@@ -88,6 +89,7 @@ on("POST", "/api/admin/resources", createResource);
 on("PATCH", "/api/admin/resources/:slug", updateResource);
 on("DELETE", "/api/admin/resources/:slug", deleteResource);
 on("GET", "/api/admin/community/threads", communityThreads);
+on("GET", "/api/admin/community/overview", communityOverview);
 on("PATCH", "/api/admin/community/threads/:id", moderateThread);
 on("DELETE", "/api/admin/community/threads/:id", removeThread);
 on("DELETE", "/api/admin/community/replies/:id", removeReply);
