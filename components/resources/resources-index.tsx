@@ -28,13 +28,13 @@ export function ResourceArt({
   return (
     <div
       className={cn(
-        "flex items-center justify-center border border-line bg-[#050505]",
+        "resource-art flex items-center justify-center border border-line bg-[#050505]",
         className,
       )}
     >
       <ServiceGlyph
         glyph={categoryGlyph[category] ?? "consulting"}
-        className="h-full w-full max-h-40 max-w-40 p-6 opacity-80"
+        className="resource-art__glyph h-full w-full max-h-72 max-w-72 p-2 opacity-90"
       />
     </div>
   );

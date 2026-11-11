@@ -725,6 +725,42 @@
   animation: glyph-trace 7s ease-in-out infinite;
 }
 
+.resource-art__glyph {
+  filter: drop-shadow(0 0 18px color-mix(in oklab, currentColor 16%, transparent));
+  animation: resource-glyph-drift 6s ease-in-out infinite;
+}
+
+.resource-art .glyph-dash {
+  animation-duration: 3.2s;
+}
+
+.resource-art .glyph-flow {
+  animation-duration: 2.8s;
+}
+
+.resource-art .glyph-pulse {
+  animation-duration: 3.2s;
+}
+
+@keyframes resource-glyph-drift {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-5px) scale(1.035);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .resource-art__glyph,
+  .resource-art .glyph-dash,
+  .resource-art .glyph-flow,
+  .resource-art .glyph-pulse {
+    animation: none;
+  }
+}
+
 /* ---------- footer social links ---------- */
 
 .social-link {
