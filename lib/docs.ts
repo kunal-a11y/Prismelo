@@ -1,6 +1,5 @@
-import fs from "node:fs";
-import path from "node:path";
 import matter from "gray-matter";
+import { DOC_FILES } from "@/lib/generated-content";
 
 export type DocStatus = "Published" | "Placeholder";
 
@@ -71,12 +70,6 @@ export const DOC_NAV: DocNavGroup[] = [
   },
 ];
 
-const DOCS_DIR = path.join(process.cwd(), "content", "docs");
-
-function fileForSlug(slug: string) {
-  return path.join(DOCS_DIR, `${slug || "overview"}.mdx`);
-}
-
 export function slugify(text: string) {
   return text
     .toLowerCase()
@@ -93,8 +86,8 @@ export function getDocSlugs() {
 export function getAllDocs(): DocMeta[] {
   return DOC_NAV.flatMap((group) =>
     group.items.map((item) => {
-      const file = fileForSlug(item.slug);
-      const raw = fs.readFileSync(file, "utf8");
+      const raw = DOC_FILES[item.slug || "overview"];
+      if (!raw) throw new Error(`Missing documentation content: ${item.slug || "overview"}`);
       const { data } = matter(raw);
       return {
         slug: item.slug ? item.slug.split("/") : [],
@@ -111,24 +104,21 @@ export function getAllDocs(): DocMeta[] {
 
 export function getDoc(slug: string[] | undefined) {
   const key = (slug ?? []).join("/");
-  try {
-    const raw = fs.readFileSync(fileForSlug(key), "utf8");
-    const { data, content } = matter(raw);
-    return {
-      slug: key ? key.split("/") : [],
-      href: key ? `/docs/${key}` : "/docs",
-      title: (data.title as string) ?? "Documentation",
-      description: (data.description as string) ?? "",
-      status: ((data.status as DocStatus) ?? "Published") as DocStatus,
-      group:
-        DOC_NAV.find((group) =>
-          group.items.some((item) => item.slug === key),
-        )?.title ?? "Documentation",
-      content,
-    };
-  } catch {
-    return null;
-  }
+  const raw = DOC_FILES[key || "overview"];
+  if (!raw) return null;
+  const { data, content } = matter(raw);
+  return {
+    slug: key ? key.split("/") : [],
+    href: key ? `/docs/${key}` : "/docs",
+    title: (data.title as string) ?? "Documentation",
+    description: (data.description as string) ?? "",
+    status: ((data.status as DocStatus) ?? "Published") as DocStatus,
+    group:
+      DOC_NAV.find((group) =>
+        group.items.some((item) => item.slug === key),
+      )?.title ?? "Documentation",
+    content,
+  };
 }
 
 export function extractHeadings(content: string): DocHeading[] {

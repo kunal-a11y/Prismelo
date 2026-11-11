@@ -132,6 +132,30 @@ export async function contact(ctx: Ctx): Promise<Response> {
   }
 
   await recordMail(ctx.env, { kind: "contact", status: "sent", recipient: recipient(ctx.env), subject });
+
+  const confirmation = renderEmail({
+    kicker: "We received your message",
+    preheader: "Your enquiry has reached the Prismelo team.",
+    heading: `Thanks for getting in touch, ${firstName}`,
+    details: [{ label: "Your enquiry", value: details! }],
+    quote: "Our team will review your message and get back to you as soon as possible.",
+    footer: "This is an automatic confirmation of the message you submitted at prismelo.tech. If you did not send it, you can ignore this email.",
+  });
+  const receipt = await sendMail(ctx.env, {
+    to: email!,
+    subject: "We received your message — Prismelo Technology",
+    html: confirmation.html,
+    text: confirmation.text,
+  });
+  await recordMail(ctx.env, {
+    kind: "contact_confirmation",
+    status: receipt.ok ? "sent" : "failed",
+    recipient: email!,
+    subject: "We received your message — Prismelo Technology",
+    detail: receipt.ok ? "" : receipt.reason === "failed" ? receipt.error ?? "" : "not configured",
+  });
+  if (!receipt.ok) console.error("contact confirmation failed", receipt.reason === "failed" ? receipt.error : "not configured");
+
   return json({ ok: true }, { env: ctx.env, request: ctx.request });
 }
 

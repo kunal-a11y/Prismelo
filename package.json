@@ -5,8 +5,11 @@
   "description": "Prismelo.tech corporate website — technology, security and software engineering.",
   "scripts": {
     "dev": "next dev",
-    "prebuild": "node -e \"console.log('Prismelo build commit:', process.env.CF_PAGES_COMMIT_SHA || 'local')\"",
+    "prebuild": "node scripts/generate-content.mjs && node -e \"console.log('Prismelo build commit:', process.env.CF_PAGES_COMMIT_SHA || 'local')\"",
     "build": "next build",
+    "cf:build": "opennextjs-cloudflare build",
+    "cf:preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "cf:deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "start": "next start",
     "lint": "tsc --noEmit",
     "setup:env": "node scripts/setup-env.mjs",
@@ -23,12 +26,14 @@
     "rehype-slug": "^6.0.0"
   },
   "devDependencies": {
+    "@opennextjs/cloudflare": "^1.20.16",
     "@tailwindcss/postcss": "^4.3.5",
     "@types/node": "^26.6.6",
     "@types/nodemailer": "^8.0.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "tailwindcss": "^4.3.5",
+    "wrangler": "^4.160.0",
     "typescript": "^5.9.3"
   },
   "overrides": {

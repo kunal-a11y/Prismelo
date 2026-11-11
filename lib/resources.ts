@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
+import { RESOURCE_FILES } from "@/lib/generated-content";
 
 /**
  * Resources are sample articles published to demonstrate the format.
@@ -20,7 +21,10 @@ export type ResourceMeta = {
 const RESOURCES_DIR = path.join(process.cwd(), "content", "resources");
 
 function readResource(slug: string) {
-  const raw = fs.readFileSync(path.join(RESOURCES_DIR, `${slug}.mdx`), "utf8");
+  const raw = fs.existsSync(path.join(RESOURCES_DIR, `${slug}.mdx`))
+    ? fs.readFileSync(path.join(RESOURCES_DIR, `${slug}.mdx`), "utf8")
+    : RESOURCE_FILES[slug];
+  if (!raw) throw new Error(`Missing resource content: ${slug}`);
   const { data, content } = matter(raw);
   const words = content.trim().split(/\s+/).length;
   return {
@@ -50,12 +54,14 @@ function readResource(slug: string) {
  * hide a post until the process restarted.
  */
 export function getResourceSlugs(): string[] {
-  if (!fs.existsSync(RESOURCES_DIR)) return [];
-  return fs
-    .readdirSync(RESOURCES_DIR)
-    .filter((file) => file.endsWith(".mdx") && !file.startsWith("_"))
-    .map((file) => file.slice(0, -".mdx".length))
-    .sort();
+  if (fs.existsSync(RESOURCES_DIR)) {
+    const files = fs
+      .readdirSync(RESOURCES_DIR)
+      .filter((file) => file.endsWith(".mdx") && !file.startsWith("_"))
+      .map((file) => file.slice(0, -".mdx".length));
+    if (files.length) return files.sort();
+  }
+  return Object.keys(RESOURCE_FILES).filter((slug) => !slug.startsWith("_")).sort();
 }
 
 export function getResources(): ResourceMeta[] {

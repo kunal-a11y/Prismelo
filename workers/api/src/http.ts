@@ -24,6 +24,7 @@ export type Env = {
   SMTP_PORT?: string;
   SMTP_USER?: string;
   SMTP_PASS?: string;
+  BREVO_API_KEY?: string;
   ADMIN_PASSWORD?: string;
   ADMIN_SESSION_SECRET?: string;
   COMMUNITY_SESSION_SECRET?: string;

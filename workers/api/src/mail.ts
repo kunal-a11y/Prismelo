@@ -35,7 +35,7 @@ function smtpConfig(env: Env) {
 }
 
 export function mailerConfigured(env: Env): boolean {
-  return smtpConfig(env) !== null;
+  return Boolean(env.BREVO_API_KEY?.trim()) || smtpConfig(env) !== null;
 }
 
 /** Sender for outbound mail: "Prismelo <hello@prismelo.tech>" or a bare address. */
@@ -235,6 +235,35 @@ function dotStuff(message: string): string {
 }
 
 export async function sendMail(env: Env, message: MailMessage): Promise<MailResult> {
+  const apiKey = env.BREVO_API_KEY?.trim();
+  if (apiKey) {
+    const from = sender(env);
+    const recipients = addresses(message.to);
+    if (recipients.length === 0) return { ok: false, reason: "failed", error: "no recipients" };
+    try {
+      const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+        method: "POST",
+        headers: { "api-key": apiKey, "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify({
+          sender: from,
+          to: recipients,
+          subject: message.subject,
+          htmlContent: message.html,
+          textContent: message.text,
+          ...(message.replyTo ? { replyTo: { email: message.replyTo } } : {}),
+        }),
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!response.ok) {
+        const detail = (await response.text()).slice(0, 300);
+        return { ok: false, reason: "failed", error: `Brevo API ${response.status}: ${detail}` };
+      }
+      return { ok: true, accepted: recipients.map((entry) => entry.email) };
+    } catch (error) {
+      return { ok: false, reason: "failed", error: error instanceof Error ? error.message : "Brevo API request failed" };
+    }
+  }
+
   const config = smtpConfig(env);
   if (!config) return { ok: false, reason: "not_configured" };
 
