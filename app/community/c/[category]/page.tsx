@@ -34,7 +34,7 @@ export default async function CategoryPage({
   const found = getCategory(category);
   if (!found) notFound();
 
-  const items = discussionsByCategory(found.slug);
+  const items = await discussionsByCategory(found.slug);
 
   return (
     <>

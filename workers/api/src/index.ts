@@ -17,6 +17,7 @@ import {
   login as communityLogin,
   logout as communityLogout,
   me,
+  profile,
   register,
   replyRoute,
   thread,
@@ -72,6 +73,7 @@ on("POST", "/api/community/register", register);
 on("POST", "/api/community/login", communityLogin);
 on("POST", "/api/community/logout", communityLogout);
 on("GET", "/api/community/me", me);
+on("GET", "/api/community/users/:username", profile);
 on("GET", "/api/community/threads", threads);
 on("POST", "/api/community/threads", createThreadRoute);
 on("GET", "/api/community/threads/:slug", thread);

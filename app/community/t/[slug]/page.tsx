@@ -23,7 +23,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const discussion = getDiscussion(slug);
+  const discussion = await getDiscussion(slug);
   if (!discussion) return { title: "Discussion not found" };
   return {
     title: discussion.title,
@@ -38,13 +38,13 @@ export default async function DiscussionPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const view = getThreadView(slug);
+  const view = await getThreadView(slug);
   if (!view) notFound();
 
   const user = await currentCommunityUser();
-  const discussion = getDiscussion(slug);
+  const discussion = await getDiscussion(slug);
   const category = getCategory(view.thread.category);
-  const related = listDiscussions()
+  const related = (await listDiscussions())
     .filter(
       (item) =>
         item.category === view.thread.category && item.slug !== view.thread.slug,

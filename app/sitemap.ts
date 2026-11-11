@@ -6,7 +6,7 @@ import { communityCategories } from "@/lib/community";
 import { listDiscussions } from "@/lib/community-data";
 import { site } from "@/lib/site";
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
 
   const staticRoutes = [
@@ -56,7 +56,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "weekly" as const,
       priority: 0.4,
     })),
-    ...listDiscussions().map((discussion) => ({
+    ...(await listDiscussions()).map((discussion) => ({
       url: `${site.url}/community/t/${discussion.slug}`,
       lastModified: now,
       changeFrequency: "monthly" as const,

@@ -9,6 +9,7 @@ import {
   type StoredUser,
 } from "@/lib/community-store";
 import type { CommunityProfile, Discussion } from "@/lib/community";
+import { communityJson } from "@/lib/community-cloudflare";
 
 /**
  * One data-file read per request, shared by every helper on the page.
@@ -54,7 +55,7 @@ function toDiscussion(
   };
 }
 
-export function listDiscussions(): Discussion[] {
+function listDiscussionsFromStore(): Discussion[] {
   const store = requestStore();
   const counts = new Map<string, number>();
   for (const reply of store.replies) {
@@ -69,33 +70,23 @@ export function listDiscussions(): Discussion[] {
     });
 }
 
-export function getDiscussion(slug: string): Discussion | null {
+function getDiscussionFromStore(slug: string): Discussion | null {
   const store = requestStore();
   const thread = findThreadBySlug(store, slug);
   if (!thread) return null;
   return toDiscussion(store, thread, repliesForThread(store, thread.id).length);
 }
 
-export function discussionsByCategory(category: string) {
-  return listDiscussions().filter((discussion) => discussion.category === category);
-}
-
-export function discussionsByAuthor(username: string) {
-  return listDiscussions().filter(
-    (discussion) => discussion.author.toLowerCase() === username.toLowerCase(),
-  );
-}
-
-export function categoryCount(slug: string) {
+function categoryCountFromStore(slug: string) {
   const store = requestStore();
   return store.threads.filter((thread) => thread.category === slug).length;
 }
 
-export function totalThreadCount() {
+function totalThreadCountFromStore() {
   return requestStore().threads.length;
 }
 
-export function getUser(username: string): CommunityProfile | null {
+function getUserFromStore(username: string): CommunityProfile | null {
   const user = findUserByUsername(requestStore(), username);
   return user ? toProfile(user) : null;
 }
@@ -124,7 +115,7 @@ export type ThreadView = {
 };
 
 /** Full thread plus its replies, with authors resolved. */
-export function getThreadView(slug: string): ThreadView | null {
+function getThreadViewFromStore(slug: string): ThreadView | null {
   const store = requestStore();
   const thread = findThreadBySlug(store, slug);
   if (!thread) return null;
@@ -143,6 +134,111 @@ export function getThreadView(slug: string): ThreadView | null {
         createdAt: reply.createdAt,
       };
     }),
+  };
+}
+
+type ApiAuthor = { id: string; username: string; name: string; bio: string; createdAt: string } | null;
+type ApiThread = {
+  id: string;
+  slug: string;
+  title: string;
+  category: string;
+  body: string;
+  authorId: string;
+  createdAt: string;
+  locked: boolean;
+  pinned: boolean;
+  replyCount?: number;
+  replies?: Array<{ id: string; threadId: string; body: string; authorId: string; createdAt: string; author: ApiAuthor }>;
+  author: ApiAuthor;
+};
+
+function apiProfile(user: NonNullable<ApiAuthor>): CommunityProfile {
+  return {
+    username: user.username,
+    displayName: user.name,
+    bio: user.bio || "Member of the Prismelo community. Reading and posting in the technical discussions.",
+    role: "Community member",
+    joinedAt: user.createdAt,
+  };
+}
+
+function apiDiscussion(thread: ApiThread): Discussion {
+  const flat = thread.body.replace(/\s+/g, " ").trim();
+  return {
+    slug: thread.slug,
+    title: thread.title,
+    category: thread.category,
+    author: thread.author?.username ?? "deleted",
+    authorName: thread.author?.name ?? "Deleted member",
+    excerpt: flat.length > 220 ? `${flat.slice(0, 220).trimEnd()}…` : flat,
+    body: paragraphs(thread.body),
+    createdAt: thread.createdAt,
+    replies: thread.replyCount ?? thread.replies?.length ?? 0,
+    pinned: thread.pinned,
+    locked: thread.locked,
+  };
+}
+
+export async function listDiscussions(): Promise<Discussion[]> {
+  const data = await communityJson<{ threads: ApiThread[] }>("/api/community/threads");
+  return data ? data.threads.map(apiDiscussion) : listDiscussionsFromStore();
+}
+
+export async function getDiscussion(slug: string): Promise<Discussion | null> {
+  const data = await communityJson<{ thread: ApiThread }>(`/api/community/threads/${encodeURIComponent(slug)}`);
+  return data ? apiDiscussion(data.thread) : getDiscussionFromStore(slug);
+}
+
+export async function discussionsByCategory(category: string) {
+  return (await listDiscussions()).filter((discussion) => discussion.category === category);
+}
+
+export async function discussionsByAuthor(username: string) {
+  return (await listDiscussions()).filter(
+    (discussion) => discussion.author.toLowerCase() === username.toLowerCase(),
+  );
+}
+
+export async function categoryCount(slug: string) {
+  const data = await communityJson<{ threads: ApiThread[] }>("/api/community/threads");
+  return data ? data.threads.filter((thread) => thread.category === slug).length : categoryCountFromStore(slug);
+}
+
+export async function totalThreadCount() {
+  const data = await communityJson<{ threads: ApiThread[] }>("/api/community/threads");
+  return data ? data.threads.length : totalThreadCountFromStore();
+}
+
+export async function getUser(username: string): Promise<CommunityProfile | null> {
+  const data = await communityJson<{ user: NonNullable<ApiAuthor> }>(`/api/community/users/${encodeURIComponent(username)}`);
+  return data ? apiProfile(data.user) : getUserFromStore(username);
+}
+
+export async function getThreadView(slug: string): Promise<ThreadView | null> {
+  const data = await communityJson<{ thread: ApiThread }>(`/api/community/threads/${encodeURIComponent(slug)}`);
+  if (!data) return getThreadViewFromStore(slug);
+
+  const thread = data.thread;
+  return {
+    thread: {
+      id: thread.id,
+      slug: thread.slug,
+      title: thread.title,
+      category: thread.category,
+      body: thread.body,
+      authorId: thread.authorId,
+      createdAt: thread.createdAt,
+      locked: thread.locked,
+      pinned: thread.pinned,
+    },
+    author: thread.author ? apiProfile(thread.author) : deletedProfile(),
+    replies: (thread.replies ?? []).map((reply) => ({
+      id: reply.id,
+      body: paragraphs(reply.body),
+      author: reply.author ? apiProfile(reply.author) : deletedProfile(),
+      createdAt: reply.createdAt,
+    })),
   };
 }
 

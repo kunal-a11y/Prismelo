@@ -21,7 +21,7 @@ export const dynamic = "force-dynamic";
 
 export default async function CommunityPage() {
   const user = await currentCommunityUser();
-  const discussions = listDiscussions();
+  const discussions = await listDiscussions();
 
   return (
     <>

@@ -27,6 +27,7 @@ import {
   findThreadBySlug,
   findUserByEmail,
   findUserById,
+  findPublicUserByUsername,
   hitRateLimit,
   createUser,
   listThreads,
@@ -192,6 +193,12 @@ export async function me(ctx: Ctx): Promise<Response> {
 
 export async function threads(ctx: Ctx): Promise<Response> {
   return json({ threads: await listThreads(ctx.env) }, { env: ctx.env, request: ctx.request });
+}
+
+export async function profile(ctx: Ctx): Promise<Response> {
+  const user = await findPublicUserByUsername(ctx.env, ctx.params.username);
+  if (!user) return json({ error: "not_found" }, { status: 404, env: ctx.env, request: ctx.request });
+  return json({ user }, { env: ctx.env, request: ctx.request });
 }
 
 type ThreadPayload = { title: string; category: string; body: string };

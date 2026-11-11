@@ -9,6 +9,12 @@
     "directory": ".open-next/assets",
     "binding": "ASSETS"
   },
+  "services": [
+    {
+      "binding": "PRISMELO_API",
+      "service": "prismelo-api"
+    }
+  ],
   "observability": {
     "enabled": true
   },

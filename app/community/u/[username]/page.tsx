@@ -16,7 +16,7 @@ export async function generateMetadata({
   params: Promise<{ username: string }>;
 }): Promise<Metadata> {
   const { username } = await params;
-  const user = getUser(username);
+  const user = await getUser(username);
   if (!user) return { title: "Profile not found" };
   return {
     title: `${user.displayName} (@${user.username})`,
@@ -32,11 +32,11 @@ export default async function ProfilePage({
   params: Promise<{ username: string }>;
 }) {
   const { username } = await params;
-  const user = getUser(username);
+  const user = await getUser(username);
   if (!user) notFound();
 
   const viewer = await currentCommunityUser();
-  const threads = discussionsByAuthor(user.username);
+  const threads = await discussionsByAuthor(user.username);
 
   return (
     <>

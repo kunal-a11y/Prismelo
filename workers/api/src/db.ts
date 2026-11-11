@@ -124,6 +124,17 @@ export async function findUserById(env: Env, id: string): Promise<User | null> {
   return row ? toUser(env, row) : null;
 }
 
+export async function findPublicUserByUsername(env: Env, username: string): Promise<PublicUser | null> {
+  const row = await env.DB.prepare(
+    "SELECT id, username, name, bio, created_at FROM users WHERE username = ?",
+  )
+    .bind(username.toLowerCase())
+    .first<{ id: string; username: string; name: string; bio: string; created_at: string }>();
+  return row
+    ? { id: row.id, username: row.username, name: row.name, bio: row.bio, createdAt: row.created_at }
+    : null;
+}
+
 export async function usernameTaken(env: Env, username: string): Promise<boolean> {
   const row = await env.DB.prepare("SELECT 1 AS hit FROM users WHERE username = ?").bind(username).first();
   return Boolean(row);

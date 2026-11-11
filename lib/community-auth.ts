@@ -5,6 +5,7 @@ import {
   readStore,
   type StoredUser,
 } from "@/lib/community-store";
+import { communityApi } from "@/lib/community-cloudflare";
 
 /**
  * Community accounts: email + password, stored as a scrypt hash in the forum
@@ -89,7 +90,21 @@ export function verifyCommunitySessionToken(token: string | undefined) {
 }
 
 /** The signed-in community member for this request, or null. */
-export async function currentCommunityUser(): Promise<StoredUser | null> {
+export type CommunityUser = StoredUser;
+
+export async function currentCommunityUser(): Promise<CommunityUser | null> {
+  const response = await communityApi("/api/community/me", true);
+  if (response) {
+    if (!response.ok) return null;
+    const result = (await response.json()) as {
+      user?: { id: string; username: string; name: string; bio: string; createdAt: string };
+    };
+    return result.user
+      ? { ...result.user, email: "", passwordHash: "" }
+      : null;
+  }
+
+  // Keep the local file-backed flow available when running `next dev`.
   const store = await cookies();
   const session = verifyCommunitySessionToken(store.get(COMMUNITY_COOKIE)?.value);
   if (!session) return null;
