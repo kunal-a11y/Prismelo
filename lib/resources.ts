@@ -20,10 +20,18 @@ export type ResourceMeta = {
 
 const RESOURCES_DIR = path.join(process.cwd(), "content", "resources");
 
+function resourceSource(slug: string) {
+  const file = path.join(RESOURCES_DIR, `${slug}.mdx`);
+  return fs.existsSync(file) ? fs.readFileSync(file, "utf8") : RESOURCE_FILES[slug];
+}
+
+function isPublished(slug: string) {
+  const raw = resourceSource(slug);
+  return Boolean(raw) && matter(raw).data.draft !== true;
+}
+
 function readResource(slug: string) {
-  const raw = fs.existsSync(path.join(RESOURCES_DIR, `${slug}.mdx`))
-    ? fs.readFileSync(path.join(RESOURCES_DIR, `${slug}.mdx`), "utf8")
-    : RESOURCE_FILES[slug];
+  const raw = resourceSource(slug);
   if (!raw) throw new Error(`Missing resource content: ${slug}`);
   const { data, content } = matter(raw);
   const words = content.trim().split(/\s+/).length;
@@ -54,14 +62,16 @@ function readResource(slug: string) {
  * hide a post until the process restarted.
  */
 export function getResourceSlugs(): string[] {
+  let slugs: string[];
   if (fs.existsSync(RESOURCES_DIR)) {
-    const files = fs
+    slugs = fs
       .readdirSync(RESOURCES_DIR)
       .filter((file) => file.endsWith(".mdx") && !file.startsWith("_"))
       .map((file) => file.slice(0, -".mdx".length));
-    if (files.length) return files.sort();
+  } else {
+    slugs = Object.keys(RESOURCE_FILES);
   }
-  return Object.keys(RESOURCE_FILES).filter((slug) => !slug.startsWith("_")).sort();
+  return slugs.filter(isPublished).sort();
 }
 
 export function getResources(): ResourceMeta[] {
